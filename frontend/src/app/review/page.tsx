@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, useFieldArray } from "react-hook-form";
 import {
@@ -12,6 +12,7 @@ import {
   Car,
   Shield,
   FileText,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +26,7 @@ import { useExtraction } from "@/lib/ExtractionContext";
 import { approveAndPush } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 import { StatusTimeline } from "@/components/StatusTimeline";
-import type { ExtractionResult } from "@/lib/types";
+import type { ExtractionResult, FieldExtraction } from "@/lib/types";
 
 const ROLE_STYLES = {
   plaintiff: { color: "bg-blue-100 text-blue-800 border-blue-300", label: "PLAINTIFF" },
@@ -34,40 +35,23 @@ const ROLE_STYLES = {
   other: { color: "bg-slate-100 text-slate-700 border-slate-300", label: "OTHER" },
 } as const;
 
-function isFieldFlagged(fieldName: string, confidenceNotes: string | null): boolean {
-  if (!confidenceNotes) return false;
-  const lower = confidenceNotes.toLowerCase();
-  const keywords = fieldName.toLowerCase().split("_");
-  return keywords.some((kw) => kw.length > 2 && lower.includes(kw));
+/** Returns CSS classes for a FieldExtraction's confidence/source status */
+function fieldStyle(fe: FieldExtraction | undefined): string {
+  if (!fe) return "";
+  if (fe.confidence === "low") return "border-l-4 border-l-amber-400 bg-amber-50/50";
+  if (fe.confidence === "medium") return "border-l-4 border-l-amber-300 bg-amber-50/30";
+  if (fe.source === "inferred") return "border-l-4 border-l-blue-400 bg-blue-50/30";
+  return "";
 }
 
-function FlaggedInput({
-  label,
-  fieldName,
-  register,
-  registerPath,
-  confidenceNotes,
-  type = "text",
-  placeholder,
-}: {
-  label: string;
-  fieldName: string;
-  register: ReturnType<typeof useForm<ExtractionResult>>["register"];
-  registerPath: Parameters<typeof register>[0];
-  confidenceNotes: string | null;
-  type?: string;
-  placeholder?: string;
-}) {
-  const flagged = isFieldFlagged(fieldName, confidenceNotes);
+/** Tooltip-style note display for inferred/low-confidence fields */
+function FieldNote({ fe }: { fe: FieldExtraction | undefined }) {
+  if (!fe?.note) return null;
+  const isInferred = fe.source === "inferred";
   return (
-    <div>
-      <Label className="text-xs font-medium text-gray-600">{label}</Label>
-      <Input
-        {...register(registerPath)}
-        type={type}
-        placeholder={placeholder}
-        className={`mt-1 ${flagged ? "border-l-4 border-l-amber-400 bg-amber-50/50" : ""}`}
-      />
+    <div className={`mt-1 flex items-start gap-1 text-[10px] ${isInferred ? "text-blue-600" : "text-amber-600"}`}>
+      <Info className="h-3 w-3 mt-0.5 shrink-0" />
+      <span>{fe.note}</span>
     </div>
   );
 }
@@ -78,7 +62,7 @@ export default function ReviewPage() {
   const { extraction, pdfBlobUrl, pipelineStatus, setPipelineStatus } =
     useExtraction();
 
-  const { register, handleSubmit, control, watch } = useForm<ExtractionResult>({
+  const { register, handleSubmit, control } = useForm<ExtractionResult>({
     defaultValues: extraction || undefined,
   });
 
@@ -87,16 +71,6 @@ export default function ReviewPage() {
     name: "parties",
   });
 
-  const confidenceNotes = watch("confidence_notes");
-
-  // Count flagged concerns from confidence notes
-  const flagCount = useMemo(() => {
-    if (!confidenceNotes) return 0;
-    // Count numbered items like "1)" or "- " patterns
-    const matches = confidenceNotes.match(/\d+\)|^- /gm);
-    return matches ? matches.length : 1;
-  }, [confidenceNotes]);
-
   useEffect(() => {
     if (!extraction) {
       router.push("/");
@@ -104,6 +78,10 @@ export default function ReviewPage() {
   }, [extraction, router]);
 
   if (!extraction) return null;
+
+  const meta = extraction.extraction_metadata;
+  const lowCount = meta?.low_confidence_fields?.length ?? 0;
+  const inferredCount = meta?.fields_inferred ?? 0;
 
   const onSubmit = async (data: ExtractionResult) => {
     try {
@@ -123,17 +101,33 @@ export default function ReviewPage() {
 
   return (
     <div className="h-[calc(100vh-73px)] flex flex-col">
-      {/* Confidence notes banner */}
-      {confidenceNotes && (
+      {/* Confidence/metadata banner */}
+      {(lowCount > 0 || inferredCount > 0) && (
         <div className="bg-amber-50 border-b border-amber-200 px-6 py-3 flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-amber-800">
-              AI flagged {flagCount} uncertaint{flagCount === 1 ? "y" : "ies"} — review highlighted fields
+              {lowCount > 0 && (
+                <span>{lowCount} low-confidence field{lowCount !== 1 ? "s" : ""}</span>
+              )}
+              {lowCount > 0 && inferredCount > 0 && <span> &middot; </span>}
+              {inferredCount > 0 && (
+                <span className="text-blue-700">{inferredCount} inferred field{inferredCount !== 1 ? "s" : ""}</span>
+              )}
+              <span className="font-normal text-amber-700"> — review highlighted fields below</span>
             </p>
-            <p className="text-xs text-amber-700 mt-1 whitespace-pre-wrap">
-              {confidenceNotes}
-            </p>
+            {meta?.low_confidence_fields && meta.low_confidence_fields.length > 0 && (
+              <p className="text-xs text-amber-600 mt-1">
+                <span className="font-medium">Low confidence:</span>{" "}
+                {meta.low_confidence_fields.join(", ")}
+              </p>
+            )}
+            {meta?.form_type && (
+              <p className="text-xs text-gray-500 mt-1">
+                Form: {meta.form_type} &middot; {meta.total_pages} page{meta.total_pages !== 1 ? "s" : ""}
+                {meta.is_amended && <span className="text-red-600 font-semibold"> &middot; AMENDED</span>}
+              </p>
+            )}
           </div>
         </div>
       )}
@@ -194,88 +188,54 @@ export default function ReviewPage() {
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div className="grid grid-cols-3 gap-4">
-                    <FlaggedInput
-                      label="Report Number"
-                      fieldName="report_number"
-                      register={register}
-                      registerPath="report_number"
-                      confidenceNotes={confidenceNotes}
-                    />
-                    <FlaggedInput
-                      label="Accident Date"
-                      fieldName="accident_date"
-                      register={register}
-                      registerPath="accident_date"
-                      confidenceNotes={confidenceNotes}
-                      type="date"
-                    />
-                    <FlaggedInput
-                      label="Accident Time"
-                      fieldName="accident_time"
-                      register={register}
-                      registerPath="accident_time"
-                      confidenceNotes={confidenceNotes}
-                      type="time"
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Report Number</Label>
+                      <Input {...register("report_number")} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Accident Date</Label>
+                      <Input {...register("accident_date")} type="date" className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Accident Time</Label>
+                      <Input {...register("accident_time")} type="time" className="mt-1" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <Label className="text-xs font-medium text-gray-600">Accident Location</Label>
+                    <Input
+                      {...register("accident_location")}
+                      placeholder="Full address or intersection"
+                      className="mt-1"
                     />
                   </div>
 
-                  <FlaggedInput
-                    label="Accident Location"
-                    fieldName="accident_location"
-                    register={register}
-                    registerPath="accident_location"
-                    confidenceNotes={confidenceNotes}
-                    placeholder="Full address or intersection"
-                  />
-
                   <div>
-                    <Label className="text-xs font-medium text-gray-600">
-                      Accident Description
-                    </Label>
-                    <Textarea
-                      {...register("accident_description")}
-                      rows={3}
-                      className={`mt-1 ${isFieldFlagged("accident_description", confidenceNotes) ? "border-l-4 border-l-amber-400 bg-amber-50/50" : ""}`}
-                    />
+                    <Label className="text-xs font-medium text-gray-600">Accident Description</Label>
+                    <Textarea {...register("accident_description")} rows={3} className="mt-1" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <FlaggedInput
-                      label="Weather Conditions"
-                      fieldName="weather"
-                      register={register}
-                      registerPath="weather_conditions"
-                      confidenceNotes={confidenceNotes}
-                    />
                     <div>
-                      <Label className="text-xs font-medium text-gray-600">
-                        Number of Vehicles
-                      </Label>
-                      <Input
-                        {...register("number_of_vehicles", {
-                          valueAsNumber: true,
-                        })}
-                        type="number"
-                        className="mt-1"
-                      />
+                      <Label className="text-xs font-medium text-gray-600">Weather Conditions</Label>
+                      <Input {...register("weather_conditions")} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Number of Vehicles</Label>
+                      <Input {...register("number_of_vehicles", { valueAsNumber: true })} type="number" className="mt-1" />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
-                    <FlaggedInput
-                      label="Reporting Officer"
-                      fieldName="officer"
-                      register={register}
-                      registerPath="reporting_officer_name"
-                      confidenceNotes={confidenceNotes}
-                    />
-                    <FlaggedInput
-                      label="Badge Number"
-                      fieldName="badge"
-                      register={register}
-                      registerPath="reporting_officer_badge"
-                      confidenceNotes={confidenceNotes}
-                    />
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Reporting Officer</Label>
+                      <Input {...register("reporting_officer_name")} className="mt-1" />
+                    </div>
+                    <div>
+                      <Label className="text-xs font-medium text-gray-600">Badge Number</Label>
+                      <Input {...register("reporting_officer_badge")} className="mt-1" />
+                    </div>
                   </div>
                 </CardContent>
               </Card>
@@ -288,76 +248,75 @@ export default function ReviewPage() {
                 </h3>
 
                 {partyFields.map((field, idx) => {
-                  const role = extraction.parties[idx]?.role || "other";
-                  const style = ROLE_STYLES[role];
+                  const party = extraction.parties[idx];
+                  if (!party) return null;
+
+                  const roleValue = party.role?.value || "other";
+                  const style = ROLE_STYLES[roleValue];
+                  const displayName = party.full_name?.value || `Party ${idx + 1}`;
 
                   return (
                     <Card key={field.id} className="overflow-hidden">
                       <CardHeader className="pb-3 bg-gray-50/50">
                         <div className="flex items-center justify-between">
                           <CardTitle className="text-sm font-medium">
-                            {extraction.parties[idx]?.full_name || `Party ${idx + 1}`}
+                            {displayName}
+                            {party.vehicle_number && (
+                              <span className="ml-2 text-xs text-gray-400 font-normal">
+                                Vehicle {party.vehicle_number}
+                              </span>
+                            )}
                           </CardTitle>
-                          <Badge
-                            variant="outline"
-                            className={`text-[10px] font-bold ${style.color}`}
-                          >
-                            {style.label}
-                          </Badge>
+                          <div className="flex items-center gap-2">
+                            {party.role?.source === "inferred" && (
+                              <Badge variant="outline" className="text-[10px] bg-blue-50 text-blue-600 border-blue-200">
+                                INFERRED
+                              </Badge>
+                            )}
+                            <Badge
+                              variant="outline"
+                              className={`text-[10px] font-bold ${style.color}`}
+                            >
+                              {style.label}
+                            </Badge>
+                          </div>
                         </div>
+                        <FieldNote fe={party.role} />
                       </CardHeader>
                       <CardContent className="pt-4 space-y-4">
                         {/* Identity */}
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-xs font-medium text-gray-600">
-                              Full Name
-                            </Label>
+                            <Label className="text-xs font-medium text-gray-600">Full Name</Label>
                             <Input
-                              {...register(`parties.${idx}.full_name`)}
-                              className="mt-1"
+                              {...register(`parties.${idx}.full_name.value`)}
+                              className={`mt-1 ${fieldStyle(party.full_name)}`}
                             />
+                            <FieldNote fe={party.full_name} />
                           </div>
                           <div>
-                            <Label className="text-xs font-medium text-gray-600">
-                              Date of Birth
-                            </Label>
+                            <Label className="text-xs font-medium text-gray-600">Date of Birth</Label>
                             <Input
                               {...register(`parties.${idx}.date_of_birth`)}
                               type="date"
-                              className={`mt-1 ${isFieldFlagged("dob", confidenceNotes) ? "border-l-4 border-l-amber-400 bg-amber-50/50" : ""}`}
+                              className="mt-1"
                             />
                           </div>
                         </div>
 
                         <div>
-                          <Label className="text-xs font-medium text-gray-600">
-                            Address
-                          </Label>
-                          <Input
-                            {...register(`parties.${idx}.address`)}
-                            className="mt-1"
-                          />
+                          <Label className="text-xs font-medium text-gray-600">Address</Label>
+                          <Input {...register(`parties.${idx}.address`)} className="mt-1" />
                         </div>
 
                         <div className="grid grid-cols-2 gap-4">
                           <div>
-                            <Label className="text-xs font-medium text-gray-600">
-                              Phone
-                            </Label>
-                            <Input
-                              {...register(`parties.${idx}.phone`)}
-                              className="mt-1"
-                            />
+                            <Label className="text-xs font-medium text-gray-600">Phone</Label>
+                            <Input {...register(`parties.${idx}.phone`)} className="mt-1" />
                           </div>
                           <div>
-                            <Label className="text-xs font-medium text-gray-600">
-                              Driver License
-                            </Label>
-                            <Input
-                              {...register(`parties.${idx}.driver_license`)}
-                              className="mt-1"
-                            />
+                            <Label className="text-xs font-medium text-gray-600">Driver License</Label>
+                            <Input {...register(`parties.${idx}.driver_license`)} className="mt-1" />
                           </div>
                         </div>
 
@@ -371,31 +330,23 @@ export default function ReviewPage() {
                           <div className="grid grid-cols-4 gap-3">
                             <div>
                               <Label className="text-xs text-gray-600">Year</Label>
-                              <Input
-                                {...register(`parties.${idx}.vehicle_year`)}
-                                className="mt-1"
-                              />
+                              <Input {...register(`parties.${idx}.vehicle_year`)} className="mt-1" />
                             </div>
                             <div>
                               <Label className="text-xs text-gray-600">Make</Label>
-                              <Input
-                                {...register(`parties.${idx}.vehicle_make`)}
-                                className="mt-1"
-                              />
+                              <Input {...register(`parties.${idx}.vehicle_make`)} className="mt-1" />
                             </div>
                             <div>
                               <Label className="text-xs text-gray-600">Model</Label>
-                              <Input
-                                {...register(`parties.${idx}.vehicle_model`)}
-                                className="mt-1"
-                              />
+                              <Input {...register(`parties.${idx}.vehicle_model`)} className="mt-1" />
                             </div>
                             <div>
                               <Label className="text-xs text-gray-600">Color</Label>
                               <Input
-                                {...register(`parties.${idx}.vehicle_color`)}
-                                className="mt-1"
+                                {...register(`parties.${idx}.vehicle_color.value`)}
+                                className={`mt-1 ${fieldStyle(party.vehicle_color)}`}
                               />
+                              <FieldNote fe={party.vehicle_color} />
                             </div>
                           </div>
                         </div>
@@ -409,41 +360,57 @@ export default function ReviewPage() {
                           </p>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <Label className="text-xs text-gray-600">
-                                Company
-                              </Label>
+                              <Label className="text-xs text-gray-600">Company</Label>
                               <Input
-                                {...register(
-                                  `parties.${idx}.insurance_company`
-                                )}
-                                className="mt-1"
+                                {...register(`parties.${idx}.insurance_company.value`)}
+                                className={`mt-1 ${fieldStyle(party.insurance_company)}`}
                               />
+                              <FieldNote fe={party.insurance_company} />
                             </div>
                             <div>
-                              <Label className="text-xs text-gray-600">
-                                Policy Number
-                              </Label>
+                              <Label className="text-xs text-gray-600">Policy Number</Label>
                               <Input
-                                {...register(
-                                  `parties.${idx}.insurance_policy_number`
-                                )}
-                                className="mt-1"
+                                {...register(`parties.${idx}.insurance_policy_number.value`)}
+                                className={`mt-1 ${fieldStyle(party.insurance_policy_number)}`}
                               />
+                              <FieldNote fe={party.insurance_policy_number} />
                             </div>
                           </div>
                         </div>
 
                         {/* Injuries */}
                         <div>
-                          <Label className="text-xs font-medium text-gray-600">
-                            Injuries
-                          </Label>
+                          <Label className="text-xs font-medium text-gray-600">Injuries</Label>
                           <Textarea
-                            {...register(`parties.${idx}.injuries`)}
+                            {...register(`parties.${idx}.injuries.value`)}
                             rows={2}
-                            className="mt-1"
+                            className={`mt-1 ${fieldStyle(party.injuries)}`}
                           />
+                          <FieldNote fe={party.injuries} />
                         </div>
+
+                        {/* Occupants */}
+                        {party.occupants && party.occupants.length > 0 && (
+                          <>
+                            <Separator />
+                            <div>
+                              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                                Occupants ({party.occupants.length})
+                              </p>
+                              <div className="space-y-2">
+                                {party.occupants.map((occ, occIdx) => (
+                                  <div key={occIdx} className="flex items-center gap-3 text-sm bg-gray-50 rounded px-3 py-2">
+                                    <Badge variant="outline" className="text-[10px]">{occ.role}</Badge>
+                                    <span className="font-medium">{occ.full_name || "Unknown"}</span>
+                                    {occ.injuries && (
+                                      <span className="text-xs text-gray-500">— {occ.injuries}</span>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </>
+                        )}
                       </CardContent>
                     </Card>
                   );

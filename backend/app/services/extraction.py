@@ -2,7 +2,7 @@
 
 Converts police report PDFs into page images via PyMuPDF, sends them
 to Claude Sonnet 4.6's vision API, and parses the structured JSON response
-into a validated ExtractionResult.
+into a validated ExtractionResult with per-field confidence metadata.
 """
 
 import base64
@@ -13,7 +13,7 @@ import fitz  # PyMuPDF
 from loguru import logger
 
 from app.config import settings
-from app.models.extraction import ExtractionResult
+from app.models.extraction import ExtractionResult, FieldExtraction
 from app.prompts.extraction_prompt import EXTRACTION_PROMPT
 
 
@@ -57,12 +57,81 @@ def _parse_json_response(raw_text: str) -> dict:
     return json.loads(text.strip())
 
 
+def _compute_metadata_stats(result: ExtractionResult, total_pages: int) -> None:
+    """Post-process the extraction result to compute metadata statistics."""
+    meta = result.extraction_metadata
+    meta.total_pages = total_pages
+
+    extracted = 0
+    inferred = 0
+    not_found = 0
+    low_confidence: list[str] = []
+
+    # Count top-level fields
+    for field_name in (
+        "report_number", "accident_date", "accident_time", "accident_location",
+        "accident_description", "weather_conditions", "road_conditions",
+        "reporting_officer_name", "reporting_officer_badge",
+    ):
+        if getattr(result, field_name) is not None:
+            extracted += 1
+        else:
+            not_found += 1
+
+    if result.number_of_vehicles is not None:
+        extracted += 1
+    else:
+        not_found += 1
+
+    # Count party-level FieldExtraction fields
+    fe_fields = ("role", "full_name", "vehicle_color", "insurance_company", "insurance_policy_number", "injuries")
+
+    for i, party in enumerate(result.parties):
+        party_label = (
+            party.full_name.value
+            if party.full_name.value
+            else f"party_{i + 1}"
+        )
+
+        for field_name in fe_fields:
+            fe: FieldExtraction = getattr(party, field_name)  # type: ignore[type-arg]
+            if fe.source == "not_found":
+                not_found += 1
+            elif fe.source == "inferred":
+                inferred += 1
+                extracted += 1
+            else:
+                if fe.value is not None:
+                    extracted += 1
+                else:
+                    not_found += 1
+
+            if fe.confidence == "low":
+                low_confidence.append(f"{party_label}.{field_name}")
+            elif fe.confidence == "medium":
+                low_confidence.append(f"{party_label}.{field_name}")
+
+        # Count plain string fields on party
+        for field_name in ("address", "date_of_birth", "phone", "driver_license",
+                           "vehicle_year", "vehicle_make", "vehicle_model", "citation_issued"):
+            if getattr(party, field_name) is not None:
+                extracted += 1
+            else:
+                not_found += 1
+
+    meta.fields_extracted = extracted
+    meta.fields_inferred = inferred
+    meta.fields_not_found = not_found
+    meta.low_confidence_fields = low_confidence
+
+
 async def extract_from_pdf(pdf_bytes: bytes) -> ExtractionResult:
     """Extract structured data from a police report PDF using Claude vision.
 
     1. Converts each PDF page to a PNG at 2x resolution
     2. Sends all pages + extraction prompt to Claude in a single message
     3. Parses and validates the JSON response into ExtractionResult
+    4. Computes extraction metadata statistics
     """
     logger.info("Starting PDF extraction ({} bytes)", len(pdf_bytes))
 
@@ -97,7 +166,7 @@ async def extract_from_pdf(pdf_bytes: bytes) -> ExtractionResult:
     try:
         response = await client.messages.create(
             model=model,
-            max_tokens=4096,
+            max_tokens=8192,  # Increased for richer structured output
             messages=[{"role": "user", "content": content}],
         )
     except anthropic.APITimeoutError:
@@ -130,9 +199,25 @@ async def extract_from_pdf(pdf_bytes: bytes) -> ExtractionResult:
         logger.error("Pydantic validation failed: {}", e)
         raise ValueError(f"Extracted data failed validation: {e}") from e
 
+    # Step 6: Post-process metadata stats
+    _compute_metadata_stats(result, total_pages=len(images))
+
+    meta = result.extraction_metadata
     logger.info(
-        "Extraction complete — report #{}, {} parties found",
+        "Extraction complete — report #{}, {} parties, form_type={}",
         result.report_number,
         len(result.parties),
+        meta.form_type,
     )
+    logger.info(
+        "Metadata: {} extracted, {} inferred, {} not_found, {} low-confidence",
+        meta.fields_extracted,
+        meta.fields_inferred,
+        meta.fields_not_found,
+        len(meta.low_confidence_fields),
+    )
+
+    if meta.form_type and "MV-104" in (meta.form_type or ""):
+        logger.info("Detected MV-104 form type")
+
     return result

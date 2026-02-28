@@ -1,6 +1,27 @@
-export interface PartyInfo {
-  role: "plaintiff" | "defendant" | "witness" | "other";
+export interface FieldExtraction<T = string> {
+  value: T | null;
+  confidence: "high" | "medium" | "low";
+  source: "explicit" | "inferred" | "not_found";
+  note: string | null;
+}
+
+export interface OccupantInfo {
   full_name: string | null;
+  vehicle_number: number | null;
+  role: "driver" | "passenger" | "pedestrian" | "other";
+  injuries: string | null;
+}
+
+export interface PartyInfo {
+  // Fields with confidence tracking
+  role: FieldExtraction<"plaintiff" | "defendant" | "witness" | "other">;
+  full_name: FieldExtraction<string>;
+  vehicle_color: FieldExtraction<string>;
+  insurance_company: FieldExtraction<string>;
+  insurance_policy_number: FieldExtraction<string>;
+  injuries: FieldExtraction<string>;
+
+  // Plain fields
   address: string | null;
   date_of_birth: string | null;
   phone: string | null;
@@ -8,11 +29,25 @@ export interface PartyInfo {
   vehicle_year: string | null;
   vehicle_make: string | null;
   vehicle_model: string | null;
-  vehicle_color: string | null;
-  insurance_company: string | null;
-  insurance_policy_number: string | null;
-  injuries: string | null;
   citation_issued: string | null;
+
+  // Vehicle section mapping
+  vehicle_number: number | null;
+
+  // Occupants
+  occupants: OccupantInfo[];
+}
+
+export interface ExtractionMetadata {
+  form_type: string | null;
+  total_pages: number;
+  fields_extracted: number;
+  fields_inferred: number;
+  fields_not_found: number;
+  low_confidence_fields: string[];
+  is_amended: boolean;
+  review_date: string | null;
+  filing_info: string | null;
 }
 
 export interface ExtractionResult {
@@ -27,7 +62,8 @@ export interface ExtractionResult {
   reporting_officer_name: string | null;
   reporting_officer_badge: string | null;
   parties: PartyInfo[];
-  confidence_notes: string | null;
+  extraction_metadata: ExtractionMetadata;
+  confidence_notes: string | null; // Computed on backend for backward compat
 }
 
 export type PipelineStatus =
