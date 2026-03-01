@@ -5,7 +5,7 @@ from .extraction import (
     ExtractionMetadata,
     ExtractionResult,
 )
-from .clio import ClioMatter, ClioCustomFieldValue, ClioCalendarEntry
+from .clio import ClioMatter, ClioCustomFieldValue, ClioCalendarEntry, PipelineStep, PipelineResult
 from .email import EmailData
 
 __all__ = [
@@ -17,5 +17,7 @@ __all__ = [
     "ClioMatter",
     "ClioCustomFieldValue",
     "ClioCalendarEntry",
+    "PipelineStep",
+    "PipelineResult",
     "EmailData",
 ]

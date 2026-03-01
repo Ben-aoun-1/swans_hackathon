@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<body style="font-family: Georgia, serif; color: #333; max-width: 600px; margin: 0 auto; padding: 20px;">
+
+  <p>Dear {{ client_first_name }},</p>
+
+  <p>Thank you for reaching out to Richards &amp; Law. We understand that the
+  incident on <strong>{{ accident_date_formatted }}</strong> near
+  <strong>{{ accident_location }}</strong> was a difficult experience &mdash;
+  {{ accident_description_brief }}.</p>
+
+  <p>We want you to know that our team is ready to support you every step
+  of the way.</p>
+
+  <p>Attorney Andrew Richards has reviewed the initial details of your case,
+  and we've prepared a retainer agreement for your review. Please find it
+  attached to this email as a PDF.</p>
+
+  <p>When you're ready, we'd love to schedule a
+  {% if booking_type == "in-office" %}visit to our office{% else %}virtual meeting{% endif %}
+  to discuss your case in detail:</p>
+
+  <p style="text-align: center; margin: 24px 0;">
+    <a href="{{ booking_link }}"
+       style="background-color: #1a365d; color: white; padding: 12px 28px;
+              text-decoration: none; border-radius: 6px; font-size: 16px;">
+      Book Your Consultation
+    </a>
+  </p>
+
+  <p>If you have any questions in the meantime, don't hesitate to reply to
+  this email or call our office.</p>
+
+  <p>Warm regards,</p>
+
+  <p><strong>The Richards &amp; Law Team</strong><br>
+  Richards &amp; Law<br>
+  New York, NY</p>
+
+</body>
+</html>

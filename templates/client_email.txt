@@ -1,0 +1,13 @@
+Dear {{ client_first_name }},
+
+Thank you for reaching out to Richards & Law. We understand that the incident on {{ accident_date_formatted }} near {{ accident_location }} was a difficult experience.
+
+Attorney Andrew Richards has reviewed your case and we've prepared a retainer agreement for your review (attached as PDF).
+
+Book your consultation: {{ booking_link }}
+
+If you have any questions, reply to this email or call our office.
+
+Warm regards,
+The Richards & Law Team
+Richards & Law, New York, NY

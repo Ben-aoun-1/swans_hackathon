@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -28,3 +32,20 @@ class ClioCalendarEntry(BaseModel):
     all_day: bool = True
     matter_id: int
     attorney_user_id: int
+
+
+class PipelineStep(BaseModel):
+    """Status of a single step in the Clio pipeline."""
+
+    name: str
+    status: Literal["pending", "running", "success", "error", "skipped"] = "pending"
+    detail: str | None = None
+
+
+class PipelineResult(BaseModel):
+    """Result of the full post-approval Clio pipeline."""
+
+    success: bool
+    matter_id: int | None = None
+    matter_url: str | None = None
+    steps: list[PipelineStep] = []
