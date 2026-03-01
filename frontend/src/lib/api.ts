@@ -1,15 +1,18 @@
 import axios from "axios";
 import type { ExtractionResult, PipelineResult, SetupResult, ClioStatus } from "./types";
 
-// Light JSON requests go through Next.js rewrite proxy
+// In production (behind Nginx), all requests go through /api.
+// In development, heavy uploads go direct to FastAPI to bypass Next.js proxy limits.
+const BACKEND_URL =
+  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+
 const api = axios.create({
   baseURL: "/api",
   timeout: 300_000,
 });
 
-// Heavy uploads go direct to FastAPI (Next.js proxy can't handle large multipart)
 const backendDirect = axios.create({
-  baseURL: "http://localhost:8000/api",
+  baseURL: `${BACKEND_URL}/api`,
 });
 
 export async function uploadAndExtract(file: File): Promise<ExtractionResult> {
