@@ -6,6 +6,8 @@ and triggers the full Clio pipeline.
 
 from __future__ import annotations
 
+import base64
+
 from fastapi import APIRouter, HTTPException
 from loguru import logger
 from pydantic import BaseModel
@@ -21,6 +23,7 @@ class ApproveRequest(BaseModel):
 
     extraction: ExtractionResult
     matter_id: int | None = None  # Optional: use existing matter
+    pdf_base64: str | None = None  # Original police report PDF for upload to Clio
 
 
 @router.post("/approve")
@@ -39,8 +42,19 @@ async def approve_extraction(req: ApproveRequest):
         req.matter_id,
     )
 
+    # Decode the original PDF if provided
+    pdf_bytes: bytes | None = None
+    if req.pdf_base64:
+        try:
+            pdf_bytes = base64.b64decode(req.pdf_base64)
+            logger.info("Decoded police report PDF: {} bytes", len(pdf_bytes))
+        except Exception as e:
+            logger.warning("Failed to decode pdf_base64: {}", e)
+
     try:
-        result = await run_pipeline(req.extraction, matter_id=req.matter_id)
+        result = await run_pipeline(
+            req.extraction, matter_id=req.matter_id, pdf_bytes=pdf_bytes
+        )
     except Exception as e:
         logger.error("Pipeline failed with unhandled exception: {}", e)
         raise HTTPException(status_code=500, detail=f"Pipeline error: {e}")

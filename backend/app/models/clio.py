@@ -49,3 +49,7 @@ class PipelineResult(BaseModel):
     matter_id: int | None = None
     matter_url: str | None = None
     steps: list[PipelineStep] = []
+    duplicate_skipped: bool = False
+    speed_to_lead_seconds: float | None = None
+    priority_score: int | None = None
+    conflict_warning: str | None = None

@@ -9,6 +9,10 @@
   <strong>{{ accident_location }}</strong> was a difficult experience &mdash;
   {{ accident_description_brief }}.</p>
 
+  {% if ai_personal_paragraph %}
+  <p>{{ ai_personal_paragraph }}</p>
+  {% endif %}
+
   <p>We want you to know that our team is ready to support you every step
   of the way.</p>
 

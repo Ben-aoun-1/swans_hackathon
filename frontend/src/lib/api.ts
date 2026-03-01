@@ -1,12 +1,13 @@
 import axios from "axios";
-import type { ExtractionResult } from "./types";
+import type { ExtractionResult, PipelineResult } from "./types";
 
-// Light requests go through Next.js rewrite proxy (avoids CORS config)
+// Light JSON requests go through Next.js rewrite proxy
 const api = axios.create({
   baseURL: "/api",
+  timeout: 300_000,
 });
 
-// Heavy uploads go direct to FastAPI (avoids Next.js proxy body/timeout limits)
+// Heavy uploads go direct to FastAPI (Next.js proxy can't handle large multipart)
 const backendDirect = axios.create({
   baseURL: "http://localhost:8000/api",
 });
@@ -20,7 +21,7 @@ export async function uploadAndExtract(file: File): Promise<ExtractionResult> {
     formData,
     {
       headers: { "Content-Type": "multipart/form-data" },
-      timeout: 180_000, // 3 min — Claude vision can take a while on large PDFs
+      timeout: 180_000,
     }
   );
 
@@ -28,8 +29,15 @@ export async function uploadAndExtract(file: File): Promise<ExtractionResult> {
 }
 
 export async function approveAndPush(
-  data: ExtractionResult
-): Promise<{ status: string }> {
-  const response = await api.post("/approve", data);
+  data: ExtractionResult,
+  pdfBase64?: string | null,
+): Promise<PipelineResult> {
+  const payload: Record<string, unknown> = { extraction: data };
+  if (pdfBase64) {
+    payload.pdf_base64 = pdfBase64;
+  }
+  const response = await backendDirect.post<PipelineResult>("/approve", payload, {
+    timeout: 300_000,
+  });
   return response.data;
 }

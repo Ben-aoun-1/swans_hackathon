@@ -8,6 +8,12 @@ const nextConfig = {
       },
     ];
   },
+  // Allow large PDF uploads through the proxy
+  experimental: {
+    serverActions: {
+      bodySizeLimit: "10mb",
+    },
+  },
 };
 
 export default nextConfig;

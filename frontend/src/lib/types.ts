@@ -76,3 +76,20 @@ export type PipelineStatus =
   | "sending_email"
   | "complete"
   | "error";
+
+export interface PipelineStepResult {
+  name: string;
+  status: "success" | "error" | "skipped" | "running";
+  detail: string | null;
+}
+
+export interface PipelineResult {
+  success: boolean;
+  matter_id: number | null;
+  matter_url: string | null;
+  steps: PipelineStepResult[];
+  duplicate_skipped: boolean;
+  speed_to_lead_seconds: number | null;
+  priority_score: number | null;
+  conflict_warning: string | null;
+}

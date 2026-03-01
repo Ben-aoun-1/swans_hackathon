@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -250,6 +251,29 @@ class ClioClient:
         logger.info("Created Clio contact: {} (id={})", contact.get("name"), contact.get("id"))
         return contact
 
+    async def find_contact_by_email(self, email: str) -> dict | None:
+        """Search for a contact by exact email address.
+
+        Clio's query= search is fuzzy, so we client-side filter
+        on email_addresses[].address for an exact match.
+        """
+        resp = await self._request(
+            "GET",
+            "/api/v4/contacts",
+            params={
+                "query": email,
+                "fields": "id,name,first_name,last_name,email_addresses{address},phone_numbers{number}",
+            },
+        )
+        contacts = resp.get("data", [])
+        email_lower = email.lower()
+        for contact in contacts:
+            for ea in contact.get("email_addresses", []):
+                if ea.get("address", "").lower() == email_lower:
+                    logger.info("Found contact by email '{}': {} (id={})", email, contact.get("name"), contact.get("id"))
+                    return contact
+        return None
+
     async def find_contact_by_name(self, name: str) -> dict | None:
         """Search for a contact by name. Returns the first match or None."""
         resp = await self._request(
@@ -257,11 +281,54 @@ class ClioClient:
             "/api/v4/contacts",
             params={
                 "query": name,
-                "fields": "id,name,first_name,last_name,email_addresses{address}",
+                "fields": "id,name,first_name,last_name,email_addresses{address},phone_numbers{number}",
             },
         )
         contacts = resp.get("data", [])
         return contacts[0] if contacts else None
+
+    async def get_contact(self, contact_id: int) -> dict:
+        """Get full contact details including etag (needed for PATCH)."""
+        resp = await self._request(
+            "GET",
+            f"/api/v4/contacts/{contact_id}",
+            params={
+                "fields": "id,etag,name,first_name,last_name,email_addresses{address},phone_numbers{number},addresses{street}",
+            },
+        )
+        return resp.get("data", resp)
+
+    async def update_contact(
+        self,
+        contact_id: int,
+        etag: str,
+        *,
+        phone: str | None = None,
+        address: str | None = None,
+    ) -> dict:
+        """Update a contact's phone and/or address. Only includes non-None fields."""
+        data: dict[str, Any] = {}
+        if phone:
+            data["phone_numbers"] = [{"name": "Work", "number": phone, "default_phone_number": True}]
+        if address:
+            data["addresses"] = [{"name": "Work", "street": address}]
+
+        if not data:
+            logger.debug("No contact fields to update for contact {}", contact_id)
+            return await self.get_contact(contact_id)
+
+        resp = await self._request(
+            "PATCH",
+            f"/api/v4/contacts/{contact_id}",
+            json_body={"data": data},
+            params={
+                "fields": "id,etag,name,first_name,last_name,email_addresses{address},phone_numbers{number}",
+                "if-match": etag,
+            },
+        )
+        contact = resp.get("data", resp)
+        logger.info("Updated contact {} with {}", contact_id, list(data.keys()))
+        return contact
 
     # =====================================================================
     # Matters
@@ -295,6 +362,27 @@ class ClioClient:
         matter = resp.get("data", resp)
         logger.info("Created Clio matter: {} (id={})", matter.get("display_number"), matter.get("id"))
         return matter
+
+    async def find_matters_by_contact(self, contact_id: int) -> list[dict]:
+        """Find all open matters where the given contact is the client."""
+        resp = await self._request(
+            "GET",
+            "/api/v4/matters",
+            params={
+                "client_id": contact_id,
+                "status": "open",
+                "fields": (
+                    "id,etag,display_number,description,status,"
+                    "client{id,name},"
+                    "matter_stage{id,name},"
+                    "responsible_attorney{id,name},"
+                    "custom_field_values{id,field_name,value}"
+                ),
+            },
+        )
+        matters = resp.get("data", [])
+        logger.info("Found {} open matter(s) for contact {}", len(matters), contact_id)
+        return matters
 
     async def get_matter(self, matter_id: int) -> dict:
         """Get full matter details including custom fields and stage."""
@@ -513,6 +601,54 @@ class ClioClient:
             raw_response=True,
         )
 
+    async def upload_document(
+        self,
+        matter_id: int,
+        filename: str,
+        file_bytes: bytes,
+        content_type: str = "application/pdf",
+    ) -> dict | None:
+        """Upload a document to a matter.
+
+        1. POST to /api/v4/documents to create the record.
+        2. PUT file bytes to the returned put_url.
+
+        Returns the document dict, or None on failure (non-fatal).
+        """
+        try:
+            resp = await self._request(
+                "POST",
+                "/api/v4/documents",
+                json_body={
+                    "data": {
+                        "name": filename,
+                        "parent": {"id": matter_id, "type": "Matter"},
+                    }
+                },
+                params={"fields": "id,name,latest_document_version{id,put_url}"},
+            )
+            doc = resp.get("data", resp)
+            put_url = (doc.get("latest_document_version") or {}).get("put_url")
+
+            if put_url:
+                async with httpx.AsyncClient(timeout=30.0) as upload_client:
+                    put_resp = await upload_client.put(
+                        put_url,
+                        content=file_bytes,
+                        headers={"Content-Type": content_type},
+                    )
+                    if put_resp.status_code < 300:
+                        logger.info("Uploaded '{}' to matter {} (doc_id={})", filename, matter_id, doc.get("id"))
+                    else:
+                        logger.warning("PUT upload returned {}: {}", put_resp.status_code, put_resp.text[:200])
+            else:
+                logger.warning("No put_url returned for document {} — file not uploaded", doc.get("id"))
+
+            return doc
+        except Exception as e:
+            logger.warning("Document upload failed (non-fatal): {}", e)
+            return None
+
     async def get_document_templates(self) -> list[dict]:
         """List all document templates."""
         resp = await self._request(
@@ -535,3 +671,170 @@ class ClioClient:
             if name_lower in tmpl.get("name", "").lower():
                 return tmpl
         return None
+
+    # =====================================================================
+    # Notes
+    # =====================================================================
+
+    async def create_note(
+        self,
+        matter_id: int,
+        subject: str,
+        detail: str,
+    ) -> dict:
+        """Create a note on a matter (appears in the Notes tab)."""
+        resp = await self._request(
+            "POST",
+            "/api/v4/notes",
+            json_body={
+                "data": {
+                    "type": "Matter",
+                    "subject": subject,
+                    "detail": detail,
+                    "matter": {"id": matter_id},
+                }
+            },
+            params={"fields": "id,subject,detail,date,type"},
+        )
+        note = resp.get("data", resp)
+        logger.info("Created note '{}' on matter {} (id={})", subject, matter_id, note.get("id"))
+        return note
+
+    # =====================================================================
+    # Tasks
+    # =====================================================================
+
+    async def create_task(
+        self,
+        matter_id: int,
+        name: str,
+        description: str,
+        *,
+        due_date: str | None = None,
+        assignee_id: int | None = None,
+        priority: str = "Normal",
+    ) -> dict:
+        """Create a task on a matter (appears in the Tasks tab).
+
+        Args:
+            matter_id: Clio matter ID.
+            name: Task name/title.
+            description: Task description.
+            due_date: Due date as YYYY-MM-DD (optional).
+            assignee_id: Clio user ID to assign (optional).
+            priority: "High", "Normal", or "Low".
+        """
+        data: dict[str, Any] = {
+            "name": name,
+            "description": description,
+            "matter": {"id": matter_id},
+            "priority": priority,
+            "status": "pending",
+        }
+        if due_date:
+            data["due_at"] = f"{due_date}T17:00:00-05:00"
+        if assignee_id:
+            data["assignee"] = {"id": assignee_id, "type": "User"}
+
+        resp = await self._request(
+            "POST",
+            "/api/v4/tasks",
+            json_body={"data": data},
+            params={"fields": "id,name,description,due_at,priority,status"},
+        )
+        task = resp.get("data", resp)
+        logger.info("Created task '{}' on matter {} (id={})", name, matter_id, task.get("id"))
+        return task
+
+    # =====================================================================
+    # Activities
+    # =====================================================================
+
+    async def create_activity(
+        self,
+        matter_id: int,
+        user_id: int,
+        date: str,
+        note: str,
+        *,
+        quantity: int = 0,
+        non_billable: bool = True,
+    ) -> dict:
+        """Log a time entry / activity on a matter.
+
+        Args:
+            matter_id: Clio matter ID.
+            user_id: Clio user ID who performed the work.
+            date: Activity date as YYYY-MM-DD.
+            note: Activity description.
+            quantity: Duration in seconds (0 for flat rate).
+            non_billable: Whether this is non-billable time.
+        """
+        resp = await self._request(
+            "POST",
+            "/api/v4/activities",
+            json_body={
+                "data": {
+                    "type": "TimeEntry",
+                    "date": date,
+                    "quantity": quantity,
+                    "price": 0,
+                    "note": note,
+                    "non_billable": non_billable,
+                    "matter": {"id": matter_id},
+                    "user": {"id": user_id},
+                }
+            },
+            params={"fields": "id,type,date,quantity,note,non_billable,total"},
+        )
+        activity = resp.get("data", resp)
+        logger.info("Created activity on matter {} (id={})", matter_id, activity.get("id"))
+        return activity
+
+    # =====================================================================
+    # Communications
+    # =====================================================================
+
+    async def create_communication(
+        self,
+        matter_id: int,
+        subject: str,
+        body: str,
+        *,
+        contact_id: int | None = None,
+        sender_id: int | None = None,
+        date: str | None = None,
+        comm_type: str = "EmailCommunication",
+    ) -> dict:
+        """Log a communication on a matter (appears in Communications tab).
+
+        Args:
+            matter_id: Clio matter ID.
+            subject: Communication subject.
+            body: Communication body text.
+            contact_id: Clio contact ID of the recipient (optional).
+            sender_id: Clio user ID of the sender (optional).
+            date: Date as YYYY-MM-DD (defaults to today).
+            comm_type: Communication type — "EmailCommunication", "PhoneCommunication", etc.
+        """
+        data: dict[str, Any] = {
+            "type": comm_type,
+            "subject": subject,
+            "body": body,
+            "matter": {"id": matter_id},
+            "date": date or datetime.now().strftime("%Y-%m-%d"),
+        }
+        if contact_id:
+            data["receivers"] = [{"id": contact_id, "type": "Contact"}]
+        if sender_id:
+            data["senders"] = [{"id": sender_id, "type": "User"}]
+
+        resp = await self._request(
+            "POST",
+            "/api/v4/communications",
+            json_body={"data": data},
+            params={"fields": "id,subject,body,date,type"},
+        )
+        comm = resp.get("data", resp)
+        logger.info("Created {} on matter {} (id={})", comm_type, matter_id, comm.get("id"))
+        return comm

@@ -58,6 +58,7 @@ async def send_client_email(email_data: EmailData, smtp_config: dict) -> None:
         "accident_description_brief": email_data.accident_description_brief,
         "booking_link": email_data.booking_link,
         "booking_type": email_data.booking_type,
+        "ai_personal_paragraph": email_data.ai_personal_paragraph or "",
     }
 
     # Render HTML and plain text bodies

@@ -13,5 +13,6 @@ class EmailData(BaseModel):
     booking_type: str  # "in-office" or "virtual"
     retainer_pdf_bytes: bytes | None = None
     retainer_pdf_filename: str = "Retainer_Agreement.pdf"
+    ai_personal_paragraph: str | None = None  # AI-generated empathetic paragraph
 
     model_config = {"arbitrary_types_allowed": True}
