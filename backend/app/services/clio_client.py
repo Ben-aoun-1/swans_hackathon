@@ -34,16 +34,23 @@ class ClioClient:
 
     Usage::
 
-        async with ClioClient() as clio:
+        async with ClioClient(access_token="...", refresh_token="...") as clio:
             me = await clio.who_am_i()
     """
 
-    def __init__(self) -> None:
-        self._access_token: str = settings.clio_access_token
-        self._refresh_token: str = settings.clio_refresh_token
+    def __init__(
+        self,
+        *,
+        access_token: str | None = None,
+        refresh_token: str | None = None,
+        session_id: str | None = None,
+    ) -> None:
+        self._access_token: str = access_token or settings.clio_access_token
+        self._refresh_token: str = refresh_token or settings.clio_refresh_token
         self._base_url: str = settings.clio_base_url
         self._client_id: str = settings.clio_client_id
         self._client_secret: str = settings.clio_client_secret
+        self._session_id: str | None = session_id
 
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
@@ -125,15 +132,14 @@ class ClioClient:
         self._access_token = body["access_token"]
         self._refresh_token = body["refresh_token"]
 
-        # Update in-memory settings so other code paths see the new token
-        settings.clio_access_token = self._access_token
-        settings.clio_refresh_token = self._refresh_token
-
         # Update the httpx client headers
         self._http.headers["Authorization"] = f"Bearer {self._access_token}"
 
-        # Persist to disk
-        self._save_tokens_to_file()
+        # Propagate refreshed tokens back to the session store
+        if self._session_id:
+            from app.services.token_store import update_tokens
+            update_tokens(self._session_id, self._access_token, self._refresh_token)
+
         logger.info("Clio access token refreshed successfully")
 
     # -- Central request method --------------------------------------------

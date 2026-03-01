@@ -8,12 +8,13 @@ from __future__ import annotations
 
 import base64
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request, Response
 from loguru import logger
 from pydantic import BaseModel
 
 from app.models.extraction import ExtractionResult
 from app.services.clio_pipeline import run_pipeline
+from app.services.token_store import get_session_id, get_tokens
 
 router = APIRouter(prefix="/api", tags=["review"])
 
@@ -28,7 +29,7 @@ class ApproveRequest(BaseModel):
 
 
 @router.post("/approve")
-async def approve_extraction(req: ApproveRequest):
+async def approve_extraction(req: ApproveRequest, request: Request, response: Response):
     """Push verified extraction data through the Clio pipeline.
 
     Receives the (potentially edited) extraction data from the review
@@ -42,6 +43,12 @@ async def approve_extraction(req: ApproveRequest):
         len(req.extraction.parties),
         req.matter_id,
     )
+
+    # Get per-session Clio tokens
+    session_id = get_session_id(request, response)
+    tokens = get_tokens(session_id)
+    if not tokens or not tokens.get("access_token"):
+        raise HTTPException(status_code=400, detail="Not connected to Clio — go to Settings to connect your account")
 
     # Decode the original PDF if provided
     pdf_bytes: bytes | None = None
@@ -58,6 +65,9 @@ async def approve_extraction(req: ApproveRequest):
             matter_id=req.matter_id,
             pdf_bytes=pdf_bytes,
             upload_timestamp=req.upload_timestamp,
+            access_token=tokens["access_token"],
+            refresh_token=tokens.get("refresh_token", ""),
+            session_id=session_id,
         )
     except Exception as e:
         logger.error("Pipeline failed with unhandled exception: {}", e)

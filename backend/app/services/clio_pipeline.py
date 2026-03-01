@@ -357,6 +357,10 @@ async def run_pipeline(
     matter_id: int | None = None,
     pdf_bytes: bytes | None = None,
     upload_timestamp: float | None = None,
+    *,
+    access_token: str | None = None,
+    refresh_token: str | None = None,
+    session_id: str | None = None,
 ) -> PipelineResult:
     """Run the full Clio post-approval pipeline.
 
@@ -365,6 +369,9 @@ async def run_pipeline(
         matter_id: Optional existing Clio matter ID.
         pdf_bytes: Original police report PDF bytes (for upload to Clio).
         upload_timestamp: Unix epoch ms when the user uploaded the PDF (for true speed-to-lead).
+        access_token: Per-session Clio access token.
+        refresh_token: Per-session Clio refresh token.
+        session_id: Session ID for token refresh propagation.
 
     Returns:
         PipelineResult with per-step status, priority score, speed-to-lead.
@@ -389,7 +396,11 @@ async def run_pipeline(
     plaintiff_name = _party_name(plaintiff) if plaintiff else "Unknown Client"
     defendant_name = _party_name(defendant) if defendant else "Unknown Defendant"
 
-    async with ClioClient() as clio:
+    async with ClioClient(
+        access_token=access_token,
+        refresh_token=refresh_token,
+        session_id=session_id,
+    ) as clio:
 
         # =================================================================
         # STEP 1: Verify Clio connection & get attorney info

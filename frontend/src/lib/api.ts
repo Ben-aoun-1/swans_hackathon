@@ -8,6 +8,7 @@ const BACKEND_URL =
 
 const backendDirect = axios.create({
   baseURL: `${BACKEND_URL}/api`,
+  withCredentials: true,
 });
 
 export async function uploadAndExtract(file: File): Promise<ExtractionResult> {
