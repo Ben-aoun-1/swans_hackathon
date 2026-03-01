@@ -6,11 +6,6 @@ import type { ExtractionResult, PipelineResult, SetupResult, ClioStatus } from "
 const BACKEND_URL =
   process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
 
-const api = axios.create({
-  baseURL: "/api",
-  timeout: 300_000,
-});
-
 const backendDirect = axios.create({
   baseURL: `${BACKEND_URL}/api`,
 });
