@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { DM_Sans, DM_Serif_Display } from "next/font/google";
+import Link from "next/link";
 import "./globals.css";
 import { ExtractionProvider } from "@/lib/ExtractionContext";
 import { Toaster } from "@/components/ui/toaster";
@@ -64,9 +65,17 @@ export default function RootLayout({
                   </span>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse-slow" />
-                <span className="text-xs text-slate-400">Clio Connected</span>
+              <div className="flex items-center gap-4">
+                <Link
+                  href="/settings"
+                  className="text-xs text-slate-400 hover:text-white transition-colors"
+                >
+                  Settings
+                </Link>
+                <div className="flex items-center gap-2">
+                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse-slow" />
+                  <span className="text-xs text-slate-400">Clio Connected</span>
+                </div>
               </div>
             </div>
           </header>

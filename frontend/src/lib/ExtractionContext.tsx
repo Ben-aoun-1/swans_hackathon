@@ -19,6 +19,8 @@ interface ExtractionContextValue {
   setPipelineStatus: (status: PipelineStatus) => void;
   pipelineResult: PipelineResult | null;
   setPipelineResult: (result: PipelineResult | null) => void;
+  uploadTimestamp: number | null;
+  setUploadTimestamp: (ts: number | null) => void;
 }
 
 const ExtractionContext = createContext<ExtractionContextValue | null>(null);
@@ -31,6 +33,7 @@ export function ExtractionProvider({ children }: { children: ReactNode }) {
     useState<PipelineStatus>("idle");
   const [pipelineResult, setPipelineResult] =
     useState<PipelineResult | null>(null);
+  const [uploadTimestamp, setUploadTimestamp] = useState<number | null>(null);
 
   return (
     <ExtractionContext.Provider
@@ -45,6 +48,8 @@ export function ExtractionProvider({ children }: { children: ReactNode }) {
         setPipelineStatus,
         pipelineResult,
         setPipelineResult,
+        uploadTimestamp,
+        setUploadTimestamp,
       }}
     >
       {children}

@@ -98,6 +98,18 @@ def _format_accident_date(date_str: str | None) -> str:
         return date_str
 
 
+DATE_FIELDS = {"Accident Date", "Plaintiff DOB", "Statute of Limitations Date"}
+
+
+def _is_valid_date(value: str) -> bool:
+    """Check if value is a valid YYYY-MM-DD date string."""
+    try:
+        datetime.strptime(value, "%Y-%m-%d")
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
 def _build_custom_field_values(
     extraction: ExtractionResult,
     field_map: dict[str, int],
@@ -109,8 +121,22 @@ def _build_custom_field_values(
     values: list[dict] = []
 
     def _add(field_name: str, value: str | None) -> None:
-        if field_name in field_map and value:
+        try:
+            if field_name not in field_map:
+                return
+            # Skip None, empty, or "N/A" values
+            if not value or value.strip() == "" or value.strip().upper() == "N/A":
+                logger.debug("Skipping custom field '{}': empty/N/A", field_name)
+                return
+            # Validate date fields
+            if field_name in DATE_FIELDS:
+                if not _is_valid_date(value):
+                    logger.warning("Skipping custom field '{}': invalid date '{}'", field_name, value)
+                    return
+            logger.debug("Custom field '{}' = '{}'", field_name, value[:80])
             values.append({"custom_field": {"id": field_map[field_name]}, "value": value})
+        except Exception as e:
+            logger.warning("Skipping custom field '{}': {}", field_name, e)
 
     _add("Accident Date", extraction.accident_date)
     _add("Accident Location", extraction.accident_location)
@@ -129,17 +155,18 @@ def _build_custom_field_values(
         _add("Plaintiff DOB", plaintiff.date_of_birth)
         _add("Plaintiff Phone", plaintiff.phone)
         _add("Plaintiff Vehicle", _party_vehicle_str(plaintiff))
-        _add("Injuries Reported", plaintiff.injuries.value)
+        _add("Injuries Reported", plaintiff.injuries.value if plaintiff.injuries else None)
 
     if defendant:
         _add("Defendant Name", _party_name(defendant))
         _add("Defendant Address", defendant.address)
-        _add("Defendant Insurance", defendant.insurance_company.value)
-        _add("Defendant Policy Number", defendant.insurance_policy_number.value)
+        _add("Defendant Insurance", defendant.insurance_company.value if defendant.insurance_company else None)
+        _add("Defendant Policy Number", defendant.insurance_policy_number.value if defendant.insurance_policy_number else None)
         _add("Defendant Vehicle", _party_vehicle_str(defendant))
 
     _add("Statute of Limitations Date", sol_date_str)
 
+    logger.info("Built {} custom field values (skipped empty/invalid)", len(values))
     return values
 
 
@@ -329,6 +356,7 @@ async def run_pipeline(
     extraction: ExtractionResult,
     matter_id: int | None = None,
     pdf_bytes: bytes | None = None,
+    upload_timestamp: float | None = None,
 ) -> PipelineResult:
     """Run the full Clio post-approval pipeline.
 
@@ -336,11 +364,14 @@ async def run_pipeline(
         extraction: Verified extraction data from the review UI.
         matter_id: Optional existing Clio matter ID.
         pdf_bytes: Original police report PDF bytes (for upload to Clio).
+        upload_timestamp: Unix epoch ms when the user uploaded the PDF (for true speed-to-lead).
 
     Returns:
         PipelineResult with per-step status, priority score, speed-to-lead.
     """
     pipeline_start = time.monotonic()
+    # If frontend provided the upload timestamp, use it for true speed-to-lead
+    upload_epoch_s = upload_timestamp / 1000.0 if upload_timestamp else None
     steps: list[PipelineStep] = []
     result_matter_id: int | None = matter_id
     result_matter_url: str | None = None
@@ -617,6 +648,21 @@ async def run_pipeline(
                     matter_data = await clio.get_matter(result_matter_id)
                     etag = matter_data.get("etag", "")
 
+                    # Merge with existing custom field values to avoid "already exists" 422
+                    existing_cfvs = matter_data.get("custom_field_values", []) or []
+                    existing_by_field_id: dict[int, int] = {}
+                    for cfv in existing_cfvs:
+                        cf = cfv.get("custom_field", {})
+                        cf_id = cf.get("id") if isinstance(cf, dict) else None
+                        cfv_id = cfv.get("id")
+                        if cf_id and cfv_id:
+                            existing_by_field_id[cf_id] = cfv_id
+
+                    for fv in field_values:
+                        cf_id = fv.get("custom_field", {}).get("id")
+                        if cf_id and cf_id in existing_by_field_id:
+                            fv["id"] = existing_by_field_id[cf_id]
+
                     await clio.update_matter_custom_fields(
                         result_matter_id, etag, field_values
                     )
@@ -853,8 +899,12 @@ async def run_pipeline(
 
                 await send_client_email(email_data, smtp_config)
 
-                # Record speed-to-lead at the moment email is sent
-                speed_to_lead = time.monotonic() - pipeline_start
+                # Record speed-to-lead: from upload (if available) or pipeline start
+                if upload_epoch_s:
+                    import time as _time
+                    speed_to_lead = _time.time() - upload_epoch_s
+                else:
+                    speed_to_lead = time.monotonic() - pipeline_start
 
                 attachment_note = " (with PDF)" if retainer_bytes else " (without attachment)"
                 step.status = "success"

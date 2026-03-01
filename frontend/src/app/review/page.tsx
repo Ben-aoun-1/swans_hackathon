@@ -102,6 +102,7 @@ export default function ReviewPage() {
     pipelineStatus,
     setPipelineStatus,
     setPipelineResult,
+    uploadTimestamp,
   } = useExtraction();
 
   const { register, handleSubmit, control } = useForm<ExtractionResult>({
@@ -140,7 +141,7 @@ export default function ReviewPage() {
   const onSubmit = async (data: ExtractionResult) => {
     try {
       setPipelineStatus("pushing_to_clio");
-      const result = await approveAndPush(data, pdfBase64);
+      const result = await approveAndPush(data, pdfBase64, uploadTimestamp);
       setPipelineResult(result);
       setPipelineStatus("complete");
       router.push("/status");

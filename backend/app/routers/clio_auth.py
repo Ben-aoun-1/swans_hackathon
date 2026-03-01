@@ -95,11 +95,24 @@ async def clio_callback(code: str | None = None, error: str | None = None):
     masked = access_token[:8] + "…" + access_token[-4:]
     logger.info("Clio OAuth complete. Access token: {}", masked)
 
+    # Auto-run setup check after successful OAuth
+    setup_check = None
+    try:
+        from app.services.clio_client import ClioClient
+        from app.services.clio_setup import check_clio_setup
+
+        async with ClioClient() as clio:
+            setup_check = await check_clio_setup(clio)
+        logger.info("Post-OAuth setup check: ready={}", setup_check.ready)
+    except Exception as e:
+        logger.warning("Post-OAuth setup check failed: {}", e)
+
     return {
         "status": "success",
         "message": "Clio OAuth tokens received and stored",
         "access_token_preview": masked,
         "expires_in": body.get("expires_in"),
+        "setup_check": setup_check.model_dump() if setup_check else None,
     }
 
 

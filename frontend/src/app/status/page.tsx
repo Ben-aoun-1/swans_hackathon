@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
-  SkipForward,
   Loader2,
   Zap,
   ExternalLink,
@@ -91,8 +90,6 @@ function StepIcon({ status }: { status: string }) {
       return <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0" />;
     case "error":
       return <XCircle className="h-4 w-4 text-red-500 shrink-0" />;
-    case "skipped":
-      return <SkipForward className="h-4 w-4 text-slate-400 shrink-0" />;
     default:
       return <Loader2 className="h-4 w-4 text-amber-500 animate-spin shrink-0" />;
   }
@@ -124,13 +121,19 @@ function PriorityBadge({ score }: { score: number }) {
 
 export default function StatusPage() {
   const router = useRouter();
-  const { pipelineResult, setPipelineResult, setPipelineStatus } = useExtraction();
+  const { pipelineResult, setPipelineResult, setPipelineStatus, uploadTimestamp } =
+    useExtraction();
 
   const [visibleCount, setVisibleCount] = useState(0);
   const [showSummary, setShowSummary] = useState(false);
   const [displaySpeed, setDisplaySpeed] = useState(0);
 
-  const totalSteps = pipelineResult?.steps?.length ?? 0;
+  // Filter out skipped steps entirely
+  const visibleSteps = pipelineResult?.steps?.filter(
+    (s) => s.status !== "skipped"
+  ) ?? [];
+
+  const totalSteps = visibleSteps.length;
   const allRevealed = visibleCount >= totalSteps;
 
   // Progressive step reveal
@@ -179,14 +182,14 @@ export default function StatusPage() {
 
   if (!pipelineResult) return null;
 
+  // Build map only from non-skipped steps
   const stepMap = new Map<string, PipelineStepResult>();
-  for (const step of pipelineResult.steps) {
+  for (const step of visibleSteps) {
     stepMap.set(step.name, step);
   }
 
-  const passed = pipelineResult.steps.filter((s) => s.status === "success").length;
-  const failed = pipelineResult.steps.filter((s) => s.status === "error").length;
-  const skipped = pipelineResult.steps.filter((s) => s.status === "skipped").length;
+  const passed = visibleSteps.filter((s) => s.status === "success").length;
+  const failed = visibleSteps.filter((s) => s.status === "error").length;
 
   // Build a flat index for determining visibility
   let flatIndex = 0;
@@ -199,6 +202,17 @@ export default function StatusPage() {
     }
   }
 
+  // Format speed display
+  const speedSeconds = pipelineResult.speed_to_lead_seconds ?? 0;
+  const speedMins = Math.floor(displaySpeed / 60);
+  const speedSecs = displaySpeed % 60;
+  const speedDisplay =
+    speedMins > 0 ? `${speedMins}m ${speedSecs}s` : `${displaySpeed}s`;
+  const speedFinalDisplay =
+    speedSeconds >= 60
+      ? `${Math.floor(speedSeconds / 60)}m ${Math.round(speedSeconds % 60)}s`
+      : `${Math.round(speedSeconds)}s`;
+
   return (
     <div className="min-h-[calc(100vh-56px)] bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
@@ -207,7 +221,7 @@ export default function StatusPage() {
           <h1 className="font-serif text-3xl text-slate-900">Pipeline Progress</h1>
           <p className="text-sm text-slate-500 mt-1">
             {allRevealed
-              ? `Complete - ${passed} passed, ${failed} failed, ${skipped} skipped`
+              ? `Complete - ${passed} of ${totalSteps} steps passed${failed > 0 ? `, ${failed} failed` : ""}`
               : `Processing step ${visibleCount} of ${totalSteps}...`}
           </p>
         </div>
@@ -218,7 +232,6 @@ export default function StatusPage() {
             const groupSteps = group.steps.filter((s) => stepMap.has(s));
             if (groupSteps.length === 0) return null;
 
-            // Check if at least one step in this group is visible
             const firstIdx = flatIndexMap.get(groupSteps[0]) ?? Infinity;
             if (firstIdx >= visibleCount) return null;
 
@@ -226,7 +239,6 @@ export default function StatusPage() {
 
             return (
               <div key={group.label} className="animate-fade-in-up">
-                {/* Group header */}
                 <div className="flex items-center gap-2 mb-3">
                   <GroupIcon className="h-4 w-4 text-slate-400" />
                   <h2 className="text-xs font-bold uppercase tracking-wider text-slate-400">
@@ -235,7 +247,6 @@ export default function StatusPage() {
                   <div className="h-px flex-1 bg-slate-200" />
                 </div>
 
-                {/* Steps */}
                 <Card className="border-slate-200 shadow-sm overflow-hidden divide-y divide-slate-100">
                   {groupSteps.map((stepName) => {
                     const step = stepMap.get(stepName);
@@ -260,9 +271,9 @@ export default function StatusPage() {
                             </p>
                           )}
                         </div>
-                        {step.status === "skipped" && (
-                          <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-400">
-                            skip
+                        {step.status === "error" && (
+                          <span className="text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded bg-red-100 text-red-600">
+                            error
                           </span>
                         )}
                       </div>
@@ -310,9 +321,11 @@ export default function StatusPage() {
                     </div>
                     <div>
                       <p className="text-3xl font-bold font-serif tracking-tight">
-                        {displaySpeed}s
+                        {allRevealed ? speedFinalDisplay : speedDisplay}
                       </p>
-                      <p className="text-xs text-slate-400">Speed to Lead</p>
+                      <p className="text-xs text-slate-400">
+                        {uploadTimestamp ? "Total time from upload" : "Speed to Lead"}
+                      </p>
                     </div>
                   </div>
 
@@ -332,12 +345,6 @@ export default function StatusPage() {
                     <span className="flex items-center gap-1">
                       <XCircle className="h-3.5 w-3.5 text-red-400" />
                       {failed} failed
-                    </span>
-                  )}
-                  {skipped > 0 && (
-                    <span className="flex items-center gap-1">
-                      <SkipForward className="h-3.5 w-3.5 text-slate-500" />
-                      {skipped} skipped
                     </span>
                   )}
                 </div>

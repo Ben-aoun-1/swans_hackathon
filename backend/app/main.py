@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from loguru import logger
 
-from app.routers import extraction, review, clio_auth, health
+from app.routers import extraction, review, clio_auth, clio_setup, health
 
 app = FastAPI(
     title="Richards & Law — Intake Automation",
@@ -27,5 +27,6 @@ app.include_router(health.router)
 app.include_router(extraction.router)
 app.include_router(review.router)
 app.include_router(clio_auth.router)
+app.include_router(clio_setup.router)
 
 logger.info("Richards & Law Intake Automation API started")

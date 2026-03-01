@@ -18,9 +18,10 @@ import { uploadAndExtract } from "@/lib/api";
 import { useToast } from "@/hooks/use-toast";
 
 const LOADING_STEPS = [
-  "Reading PDF pages",
-  "Analyzing report with AI",
-  "Structuring extracted data",
+  "Uploading PDF",
+  "Reading pages",
+  "AI analyzing report",
+  "Structuring data",
 ];
 
 function formatSize(bytes: number): string {
@@ -32,8 +33,13 @@ function formatSize(bytes: number): string {
 export default function UploadPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const { setExtraction, setPdfBlobUrl, setPdfBase64, setPipelineStatus } =
-    useExtraction();
+  const {
+    setExtraction,
+    setPdfBlobUrl,
+    setPdfBase64,
+    setPipelineStatus,
+    setUploadTimestamp,
+  } = useExtraction();
 
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -42,26 +48,48 @@ export default function UploadPage() {
   const [fileSize, setFileSize] = useState(0);
   const [progress, setProgress] = useState(0);
   const [loadingStep, setLoadingStep] = useState(0);
+  const [apiDone, setApiDone] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Animated progress during extraction
+  // Progress bar: caps at 80% until API responds, then jumps to 100%
   useEffect(() => {
     if (!isLoading) {
       setProgress(0);
       setLoadingStep(0);
+      setApiDone(false);
+      return;
+    }
+    if (apiDone) {
+      // API responded - jump to 100
+      setProgress(100);
+      setLoadingStep(3);
       return;
     }
     const start = Date.now();
     const interval = setInterval(() => {
       const elapsed = (Date.now() - start) / 1000;
-      const p = Math.min(92, 92 * (1 - Math.exp(-elapsed / 28)));
-      setProgress(p);
-      if (elapsed < 3) setLoadingStep(0);
-      else if (elapsed < 35) setLoadingStep(1);
-      else setLoadingStep(2);
-    }, 150);
+
+      // Phase-based progress, caps at 80% until API responds
+      let p: number;
+      if (elapsed < 1) {
+        // 0-10%: uploading (instant)
+        p = elapsed * 10;
+        setLoadingStep(0);
+      } else if (elapsed < 3) {
+        // 10-30%: reading pages (first 2 seconds)
+        p = 10 + ((elapsed - 1) / 2) * 20;
+        setLoadingStep(1);
+      } else {
+        // 30-80%: AI analyzing (asymptotic approach to 80%, never exceeds)
+        const analysisElapsed = elapsed - 3;
+        p = 30 + 50 * (1 - Math.exp(-analysisElapsed / 20));
+        setLoadingStep(2);
+      }
+
+      setProgress(Math.min(80, p));
+    }, 100);
     return () => clearInterval(interval);
-  }, [isLoading]);
+  }, [isLoading, apiDone]);
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -80,6 +108,10 @@ export default function UploadPage() {
       setFileSize(file.size);
       setPipelineStatus("extracting");
 
+      // Record upload timestamp for true speed-to-lead
+      const ts = Date.now();
+      setUploadTimestamp(ts);
+
       const blobUrl = URL.createObjectURL(file);
       setPdfBlobUrl(blobUrl);
 
@@ -93,10 +125,10 @@ export default function UploadPage() {
 
       try {
         const result = await uploadAndExtract(file);
-        setProgress(100);
+        setApiDone(true);
         setExtraction(result);
         setPipelineStatus("reviewing");
-        await new Promise((r) => setTimeout(r, 400));
+        await new Promise((r) => setTimeout(r, 500));
         router.push("/review");
       } catch (err: unknown) {
         setIsLoading(false);
@@ -111,7 +143,7 @@ export default function UploadPage() {
         });
       }
     },
-    [router, setExtraction, setPdfBlobUrl, setPdfBase64, setPipelineStatus, toast]
+    [router, setExtraction, setPdfBlobUrl, setPdfBase64, setPipelineStatus, setUploadTimestamp, toast]
   );
 
   const handleDrop = useCallback(
@@ -198,8 +230,8 @@ export default function UploadPage() {
 
                 <div className="mt-6 space-y-4">
                   {LOADING_STEPS.map((step, i) => {
-                    const isDone = i < loadingStep;
-                    const isActive = i === loadingStep;
+                    const isDone = i < loadingStep || (apiDone && i <= loadingStep);
+                    const isActive = i === loadingStep && !apiDone;
                     return (
                       <div
                         key={i}

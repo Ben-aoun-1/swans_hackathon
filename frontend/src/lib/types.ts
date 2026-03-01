@@ -93,3 +93,27 @@ export interface PipelineResult {
   priority_score: number | null;
   conflict_warning: string | null;
 }
+
+// ── Clio Setup ──────────────────────────────────────────────────────────
+
+export interface SetupStep {
+  name: string;
+  status: "pending" | "success" | "error" | "skipped";
+  detail: string | null;
+}
+
+export interface SetupResult {
+  ready: boolean;
+  steps: SetupStep[];
+  attorney_name: string | null;
+  attorney_id: number | null;
+  practice_area_id: number | null;
+  missing_items: string[];
+}
+
+export interface ClioStatus {
+  has_access_token: boolean;
+  has_refresh_token: boolean;
+  tokens_file_exists: boolean;
+  access_token_preview: string | null;
+}

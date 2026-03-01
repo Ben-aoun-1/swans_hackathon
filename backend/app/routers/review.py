@@ -24,6 +24,7 @@ class ApproveRequest(BaseModel):
     extraction: ExtractionResult
     matter_id: int | None = None  # Optional: use existing matter
     pdf_base64: str | None = None  # Original police report PDF for upload to Clio
+    upload_timestamp: float | None = None  # Unix epoch ms when user uploaded the PDF
 
 
 @router.post("/approve")
@@ -53,7 +54,10 @@ async def approve_extraction(req: ApproveRequest):
 
     try:
         result = await run_pipeline(
-            req.extraction, matter_id=req.matter_id, pdf_bytes=pdf_bytes
+            req.extraction,
+            matter_id=req.matter_id,
+            pdf_bytes=pdf_bytes,
+            upload_timestamp=req.upload_timestamp,
         )
     except Exception as e:
         logger.error("Pipeline failed with unhandled exception: {}", e)

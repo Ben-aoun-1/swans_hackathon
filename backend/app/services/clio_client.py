@@ -393,7 +393,7 @@ class ClioClient:
                 "fields": (
                     "id,etag,display_number,description,status,"
                     "client{id,name},"
-                    "custom_field_values{id,field_name,value},"
+                    "custom_field_values{id,field_name,value,custom_field},"
                     "matter_stage{id,name}"
                 ),
             },
@@ -501,6 +501,68 @@ class ClioClient:
             if name_lower in stage.get("name", "").lower():
                 return stage["id"]
         return None
+
+    async def create_practice_area(self, name: str) -> dict:
+        """Create a new practice area."""
+        resp = await self._request(
+            "POST",
+            "/api/v4/practice_areas",
+            json_body={"data": {"name": name}},
+            params={"fields": "id,name"},
+        )
+        pa = resp.get("data", resp)
+        logger.info("Created practice area '{}' (id={})", pa.get("name"), pa.get("id"))
+        return pa
+
+    async def create_matter_stage(
+        self, name: str, practice_area_id: int, order: int
+    ) -> dict:
+        """Create a matter stage for a practice area."""
+        resp = await self._request(
+            "POST",
+            "/api/v4/matter_stages",
+            json_body={
+                "data": {
+                    "name": name,
+                    "practice_area": {"id": practice_area_id},
+                    "order": order,
+                }
+            },
+            params={"fields": "id,name,order"},
+        )
+        stage = resp.get("data", resp)
+        logger.info("Created matter stage '{}' (id={})", stage.get("name"), stage.get("id"))
+        return stage
+
+    async def create_custom_field(
+        self,
+        name: str,
+        field_type: str = "text_line",
+        *,
+        parent_type: str = "Matter",
+    ) -> dict:
+        """Create a matter-level custom field.
+
+        Args:
+            name: Display name of the field.
+            field_type: One of text_line, text_area, date, numeric, etc.
+            parent_type: Usually "Matter".
+        """
+        resp = await self._request(
+            "POST",
+            "/api/v4/custom_fields",
+            json_body={
+                "data": {
+                    "name": name,
+                    "field_type": field_type,
+                    "parent_type": parent_type,
+                }
+            },
+            params={"fields": "id,name,field_type,parent_type"},
+        )
+        cf = resp.get("data", resp)
+        logger.info("Created custom field '{}' (id={}, type={})", cf.get("name"), cf.get("id"), cf.get("field_type"))
+        return cf
 
     # =====================================================================
     # Calendar Entries
