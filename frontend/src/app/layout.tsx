@@ -4,6 +4,7 @@ import Link from "next/link";
 import "./globals.css";
 import { ExtractionProvider } from "@/lib/ExtractionContext";
 import { Toaster } from "@/components/ui/toaster";
+import { ClioStatusBadge } from "@/components/ClioStatusBadge";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -72,10 +73,7 @@ export default function RootLayout({
                 >
                   Settings
                 </Link>
-                <div className="flex items-center gap-2">
-                  <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse-slow" />
-                  <span className="text-xs text-slate-400">Clio Connected</span>
-                </div>
+                <ClioStatusBadge />
               </div>
             </div>
           </header>

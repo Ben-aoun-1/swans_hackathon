@@ -167,7 +167,7 @@ export default function SettingsPage() {
                   isConnected ? "bg-emerald-400 animate-pulse-slow" : "bg-red-400"
                 }`}
               />
-              {isConnected ? (
+              {isConnected && (
                 <Button
                   variant="outline"
                   size="sm"
@@ -177,16 +177,20 @@ export default function SettingsPage() {
                   <RefreshCw className="h-3 w-3 mr-1" />
                   Refresh
                 </Button>
-              ) : (
-                <Button
-                  size="sm"
-                  onClick={handleConnect}
-                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
-                >
-                  <ExternalLink className="h-3 w-3 mr-1" />
-                  Connect
-                </Button>
               )}
+              <Button
+                size="sm"
+                onClick={handleConnect}
+                className={
+                  isConnected
+                    ? "text-xs border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800"
+                    : "bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
+                }
+                variant={isConnected ? "outline" : "default"}
+              >
+                <ExternalLink className="h-3 w-3 mr-1" />
+                {isConnected ? "Reconnect" : "Connect"}
+              </Button>
             </div>
           </div>
 
