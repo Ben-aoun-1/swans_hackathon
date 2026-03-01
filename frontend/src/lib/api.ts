@@ -4,7 +4,7 @@ import type { ExtractionResult, PipelineResult, SetupResult, ClioStatus } from "
 // In production (behind Nginx), all requests go through /api.
 // In development, heavy uploads go direct to FastAPI to bypass Next.js proxy limits.
 const BACKEND_URL =
-  process.env.NEXT_PUBLIC_BACKEND_URL || "http://localhost:8000";
+  process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8000";
 
 const backendDirect = axios.create({
   baseURL: `${BACKEND_URL}/api`,
