@@ -12,7 +12,15 @@ PASS 1 — RAW EXTRACTION (no interpretation):
 - Do NOT assign plaintiff/defendant roles yet — use "other" for all parties in this pass
 
 PASS 2 — INTERPRETATION:
-- Assign plaintiff/defendant roles based on: who was injured, who was cited, who was at fault per the narrative, who was legally stopped vs. who caused the collision
+- Assign plaintiff/defendant roles using these definitions:
+  • PLAINTIFF = the VICTIM — the party who was struck, injured, or not at fault. This is our client.
+  • DEFENDANT = the AT-FAULT party — the one who caused the collision (ran a light, changed lanes into another vehicle, rear-ended someone, etc.)
+- Decision process for role assignment:
+  1. Read the narrative/description carefully. Identify which party CAUSED the collision (struck, hit, collided into the other). That party is the DEFENDANT.
+  2. The OTHER party (the one who was struck or was legally stopped) is the PLAINTIFF.
+  3. If one party has injuries and the other does not, the injured party is more likely the PLAINTIFF.
+  4. If a citation was issued, the cited party is more likely the DEFENDANT.
+- CONSISTENCY CHECK: After assigning roles, verify your assignments. If your note says "Party X struck Party Y" or "Party X is the at-fault party", then Party X MUST be the defendant, NOT the plaintiff. If this check fails, swap the roles.
 - Mark every role assignment with source: "inferred" and a note explaining why
 - For any other field that required interpretation beyond direct reading, mark source: "inferred"
 - Fields read directly from labeled form fields get source: "explicit"

@@ -28,6 +28,7 @@ from app.services.clio_client import ClioAPIError, ClioClient
 from app.services.document_gen import (
     download_retainer_pdf,
     generate_retainer,
+    generate_retainer_locally,
 )
 from app.services.email_sender import get_booking_link, send_client_email
 
@@ -150,6 +151,7 @@ async def run_pipeline(
     steps: list[PipelineStep] = []
     result_matter_id: int | None = matter_id
     result_matter_url: str | None = None
+    result_matter_display_number: str | None = None
     pi_practice_area_id: int | None = None  # Resolved in step 4, used in step 6
 
     plaintiff = _find_party_by_role(extraction, "plaintiff")
@@ -165,12 +167,14 @@ async def run_pipeline(
         step = PipelineStep(name="authenticate", status="running")
         steps.append(step)
         attorney_id: int | None = None
+        attorney_name: str | None = None
 
         try:
             me = await clio.who_am_i()
             attorney_id = me.get("id")
+            attorney_name = me.get("name")
             step.status = "success"
-            step.detail = f"Authenticated as {me.get('name')} (id={attorney_id})"
+            step.detail = f"Authenticated as {attorney_name} (id={attorney_id})"
             logger.info(step.detail)
         except Exception as e:
             step.status = "error"
@@ -257,8 +261,9 @@ async def run_pipeline(
                     practice_area_id=pi_practice_area_id,
                 )
                 result_matter_id = matter["id"]
+                result_matter_display_number = matter.get("display_number")
                 step.status = "success"
-                step.detail = f"Created matter #{matter.get('display_number')} (id={result_matter_id})"
+                step.detail = f"Created matter #{result_matter_display_number} (id={result_matter_id})"
             else:
                 step.status = "error"
                 step.detail = "Cannot create matter: no contact ID available"
@@ -346,7 +351,7 @@ async def run_pipeline(
 
         try:
             retainer_doc = await generate_retainer(clio, result_matter_id, plaintiff_name)
-            step.detail = f"Generated '{retainer_doc.get('name')}' (id={retainer_doc.get('id')})"
+            step.detail = f"Clio doc '{retainer_doc.get('name')}' (id={retainer_doc.get('id')})"
 
             # Poll for version + download (async generation)
             retainer_bytes = await download_retainer_pdf(clio, retainer_doc["id"])
@@ -354,13 +359,28 @@ async def run_pipeline(
                 step.status = "success"
                 step.detail += f", downloaded {len(retainer_bytes)} bytes"
             else:
-                step.status = "success"
-                step.detail += " (PDF not yet available — email will be sent without attachment)"
-                logger.warning("Retainer document created but PDF not downloadable yet")
+                logger.info("Clio PDF not available — falling back to local generation")
+                retainer_bytes = generate_retainer_locally(
+                    extraction, result_matter_display_number, attorney_name
+                )
+                if retainer_bytes:
+                    step.status = "success"
+                    step.detail += f", local PDF generated ({len(retainer_bytes)} bytes)"
+                else:
+                    step.status = "success"
+                    step.detail += " (PDF generation failed — email will be sent without attachment)"
         except ValueError as e:
-            step.status = "skipped"
-            step.detail = str(e)
-            logger.warning("Retainer generation skipped: {}", e)
+            # Template not found in Clio — try local only
+            logger.warning("Clio template not found, trying local generation: {}", e)
+            retainer_bytes = generate_retainer_locally(
+                extraction, result_matter_display_number, attorney_name
+            )
+            if retainer_bytes:
+                step.status = "success"
+                step.detail = f"Local PDF generated ({len(retainer_bytes)} bytes)"
+            else:
+                step.status = "skipped"
+                step.detail = str(e)
         except Exception as e:
             step.status = "error"
             step.detail = str(e)
