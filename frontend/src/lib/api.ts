@@ -65,3 +65,7 @@ export async function runClioSetup(): Promise<SetupResult> {
   const response = await backendDirect.post<SetupResult>("/clio/setup/run");
   return response.data;
 }
+
+export async function disconnectClio(): Promise<void> {
+  await backendDirect.post("/clio/disconnect");
+}

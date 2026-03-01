@@ -45,9 +45,6 @@ class ClioClient:
         self._client_id: str = settings.clio_client_id
         self._client_secret: str = settings.clio_client_secret
 
-        # Try to load tokens from backup file on disk
-        self._load_tokens_from_file()
-
         self._http = httpx.AsyncClient(
             base_url=self._base_url,
             headers=self._build_headers(),

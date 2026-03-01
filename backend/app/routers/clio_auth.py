@@ -1,24 +1,22 @@
 """Clio Manage OAuth 2.0 authentication endpoints.
 
 Handles the authorize redirect and token exchange callback.
-Tokens are stored both in-memory (settings) and on disk (.clio_tokens.json).
+Tokens are stored in-memory only — they do NOT persist to disk,
+so each server restart starts disconnected.
 """
 
 from __future__ import annotations
 
-import json
-from pathlib import Path
 from urllib.parse import urlencode
 
 import httpx
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import RedirectResponse
 from loguru import logger
 
 from app.config import settings
 
 router = APIRouter(prefix="/api/clio", tags=["clio-auth"])
-
-TOKENS_FILE = Path(__file__).resolve().parent.parent.parent / ".clio_tokens.json"
 
 
 @router.get("/auth")
@@ -48,9 +46,8 @@ async def clio_callback(code: str | None = None, error: str | None = None):
     if not code:
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
-    logger.info("Received Clio OAuth callback, exchanging code for tokens…")
+    logger.info("Received Clio OAuth callback, exchanging code for tokens...")
 
-    # Exchange code for tokens — MUST be form-encoded, not JSON
     async with httpx.AsyncClient() as client:
         resp = await client.post(
             f"{settings.clio_base_url}/oauth/token",
@@ -76,44 +73,23 @@ async def clio_callback(code: str | None = None, error: str | None = None):
     access_token = body["access_token"]
     refresh_token = body["refresh_token"]
 
-    # Store in-memory
+    # Store in-memory ONLY — no disk persistence
     settings.clio_access_token = access_token
     settings.clio_refresh_token = refresh_token
 
-    # Persist to disk so tokens survive server restart
-    try:
-        TOKENS_FILE.write_text(
-            json.dumps(
-                {"access_token": access_token, "refresh_token": refresh_token},
-                indent=2,
-            )
-        )
-        logger.info("Tokens saved to {}", TOKENS_FILE)
-    except Exception as e:
-        logger.warning("Could not persist tokens to file: {}", e)
-
-    masked = access_token[:8] + "…" + access_token[-4:]
+    masked = access_token[:8] + "..." + access_token[-4:]
     logger.info("Clio OAuth complete. Access token: {}", masked)
 
-    # Auto-run setup check after successful OAuth
-    setup_check = None
-    try:
-        from app.services.clio_client import ClioClient
-        from app.services.clio_setup import check_clio_setup
+    return RedirectResponse(url="/settings", status_code=302)
 
-        async with ClioClient() as clio:
-            setup_check = await check_clio_setup(clio)
-        logger.info("Post-OAuth setup check: ready={}", setup_check.ready)
-    except Exception as e:
-        logger.warning("Post-OAuth setup check failed: {}", e)
 
-    return {
-        "status": "success",
-        "message": "Clio OAuth tokens received and stored",
-        "access_token_preview": masked,
-        "expires_in": body.get("expires_in"),
-        "setup_check": setup_check.model_dump() if setup_check else None,
-    }
+@router.post("/disconnect")
+async def clio_disconnect():
+    """Clear the current Clio connection (in-memory tokens)."""
+    settings.clio_access_token = ""
+    settings.clio_refresh_token = ""
+    logger.info("Clio account disconnected")
+    return {"status": "disconnected"}
 
 
 @router.get("/status")
@@ -121,14 +97,13 @@ async def clio_status():
     """Check whether Clio tokens are configured."""
     has_token = bool(settings.clio_access_token)
     has_refresh = bool(settings.clio_refresh_token)
-    has_file = TOKENS_FILE.exists()
 
     return {
         "has_access_token": has_token,
         "has_refresh_token": has_refresh,
-        "tokens_file_exists": has_file,
+        "tokens_file_exists": False,
         "access_token_preview": (
-            settings.clio_access_token[:8] + "…" + settings.clio_access_token[-4:]
+            settings.clio_access_token[:8] + "..." + settings.clio_access_token[-4:]
             if has_token
             else None
         ),

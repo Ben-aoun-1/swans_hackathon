@@ -7,6 +7,7 @@ import {
   Loader2,
   Settings,
   Plug,
+  PlugZap,
   Play,
   Shield,
   Database,
@@ -16,6 +17,7 @@ import {
   AlertTriangle,
   ExternalLink,
   RefreshCw,
+  LogOut,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -24,6 +26,7 @@ import {
   getClioAuthUrl,
   checkClioSetup,
   runClioSetup,
+  disconnectClio,
 } from "@/lib/api";
 import type { ClioStatus, SetupResult, SetupStep } from "@/lib/types";
 
@@ -54,7 +57,6 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [running, setRunning] = useState(false);
-  const [connectingUrl, setConnectingUrl] = useState<string | null>(null);
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -65,6 +67,8 @@ export default function SettingsPage() {
         const check = await checkClioSetup();
         setSetupResult(check);
         setChecking(false);
+      } else {
+        setSetupResult(null);
       }
     } catch {
       // Backend not running or not connected
@@ -80,10 +84,19 @@ export default function SettingsPage() {
   const handleConnect = async () => {
     try {
       const url = await getClioAuthUrl();
-      setConnectingUrl(url);
-      window.open(url, "_blank");
+      window.location.href = url;
     } catch {
-      // error handled
+      // error
+    }
+  };
+
+  const handleDisconnect = async () => {
+    try {
+      await disconnectClio();
+      setClioStatus({ has_access_token: false, has_refresh_token: false, tokens_file_exists: false, access_token_preview: null });
+      setSetupResult(null);
+    } catch {
+      // error
     }
   };
 
@@ -93,7 +106,7 @@ export default function SettingsPage() {
       const result = await checkClioSetup();
       setSetupResult(result);
     } catch {
-      // error handled
+      // error
     } finally {
       setChecking(false);
     }
@@ -105,7 +118,7 @@ export default function SettingsPage() {
       const result = await runClioSetup();
       setSetupResult(result);
     } catch {
-      // error handled
+      // error
     } finally {
       setRunning(false);
     }
@@ -139,7 +152,7 @@ export default function SettingsPage() {
             <div>
               <h1 className="font-serif text-2xl text-slate-900">Settings</h1>
               <p className="text-sm text-slate-500">
-                Clio connection and account configuration
+                Connect your Clio account to get started
               </p>
             </div>
           </div>
@@ -149,62 +162,66 @@ export default function SettingsPage() {
         <Card className="border-slate-200 shadow-sm overflow-hidden mb-6 animate-fade-in-up">
           <div className="px-6 py-4 bg-white flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <Plug className="h-5 w-5 text-slate-400" />
+              {isConnected ? (
+                <PlugZap className="h-5 w-5 text-emerald-500" />
+              ) : (
+                <Plug className="h-5 w-5 text-slate-400" />
+              )}
               <div>
                 <p className="text-sm font-semibold text-slate-800">
                   Clio Manage
                 </p>
                 <p className="text-xs text-slate-400">
                   {isConnected
-                    ? `Connected${clioStatus?.access_token_preview ? ` (${clioStatus.access_token_preview})` : ""}`
-                    : "Not connected"}
+                    ? `Connected (${setupResult?.attorney_name || "loading..."})`
+                    : "Not connected - connect your account below"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <div
                 className={`h-2.5 w-2.5 rounded-full ${
                   isConnected ? "bg-emerald-400 animate-pulse-slow" : "bg-red-400"
                 }`}
               />
-              {isConnected && (
+              {isConnected ? (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefresh}
+                    className="text-xs"
+                  >
+                    <RefreshCw className="h-3 w-3 mr-1" />
+                    Refresh
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleDisconnect}
+                    className="text-xs text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                  >
+                    <LogOut className="h-3 w-3 mr-1" />
+                    Disconnect
+                  </Button>
+                </>
+              ) : (
                 <Button
-                  variant="outline"
                   size="sm"
-                  onClick={handleRefresh}
-                  className="text-xs"
+                  onClick={handleConnect}
+                  className="bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
                 >
-                  <RefreshCw className="h-3 w-3 mr-1" />
-                  Refresh
+                  <ExternalLink className="h-3 w-3 mr-1" />
+                  Connect
                 </Button>
               )}
-              <Button
-                size="sm"
-                onClick={handleConnect}
-                className={
-                  isConnected
-                    ? "text-xs border-slate-200 text-slate-600 hover:bg-slate-50 hover:text-slate-800"
-                    : "bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold"
-                }
-                variant={isConnected ? "outline" : "default"}
-              >
-                <ExternalLink className="h-3 w-3 mr-1" />
-                {isConnected ? "Reconnect" : "Connect"}
-              </Button>
             </div>
           </div>
-
-          {connectingUrl && !isConnected && (
-            <div className="px-6 py-3 bg-amber-50 border-t border-amber-100 text-xs text-amber-700">
-              OAuth window opened. Complete authorization in the new tab, then
-              refresh this page.
-            </div>
-          )}
         </Card>
 
         {/* Setup Status */}
         {isConnected && (
-          <div className="animate-fade-in-up" style={{ animationDelay: "0.1s", opacity: 0 }}>
+          <div className="animate-fade-in-up">
             {/* Attorney Info */}
             {setupResult?.attorney_name && (
               <Card className="border-slate-200 shadow-sm overflow-hidden mb-6">
@@ -366,11 +383,11 @@ export default function SettingsPage() {
               </div>
               <div>
                 <p className="text-base font-semibold text-slate-700">
-                  Connect to Clio Manage
+                  Connect your Clio Account
                 </p>
                 <p className="text-sm text-slate-400 mt-1 max-w-sm">
-                  Authorize this app to access your Clio account. The setup
-                  agent will then configure everything automatically.
+                  Sign in with your Clio Manage account to get started.
+                  The setup agent will configure everything automatically.
                 </p>
               </div>
               <Button
