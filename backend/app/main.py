@@ -17,6 +17,7 @@ app.add_middleware(
         "http://localhost:3000",
         "http://127.0.0.1:3000",
         "http://16.170.241.158",
+        "https://richards-law.duckdns.org",
     ],
     allow_credentials=True,
     allow_methods=["*"],
