@@ -114,24 +114,33 @@ class ClioClient:
 
     async def _refresh_access_token(self) -> None:
         """Refresh the OAuth access token using the refresh token."""
+        if not self._refresh_token:
+            raise ClioAPIError(401, "No refresh token available")
+
         logger.info("Refreshing Clio access token…")
-        resp = await self._http.post(
-            "/oauth/token",
-            data={
-                "grant_type": "refresh_token",
-                "refresh_token": self._refresh_token,
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-            },
-            headers={"Content-Type": "application/x-www-form-urlencoded"},
-        )
+        # Use a clean httpx client — the main one has Authorization/Content-Type
+        # headers that can interfere with the OAuth token endpoint.
+        async with httpx.AsyncClient(timeout=30.0) as oauth_client:
+            resp = await oauth_client.post(
+                f"{self._base_url}/oauth/token",
+                data={
+                    "grant_type": "refresh_token",
+                    "refresh_token": self._refresh_token,
+                    "client_id": self._client_id,
+                    "client_secret": self._client_secret,
+                },
+                headers={"Content-Type": "application/x-www-form-urlencoded"},
+            )
 
         if resp.status_code != 200:
-            raise ClioAPIError(resp.status_code, f"Token refresh failed: {resp.text}")
+            logger.error("Token refresh failed ({}): {}", resp.status_code, resp.text[:300])
+            raise ClioAPIError(resp.status_code, f"Token refresh failed: {resp.text[:300]}")
 
         body = resp.json()
         self._access_token = body["access_token"]
-        self._refresh_token = body["refresh_token"]
+        # Clio may or may not return a new refresh_token
+        if "refresh_token" in body:
+            self._refresh_token = body["refresh_token"]
 
         # Update the httpx client headers
         self._http.headers["Authorization"] = f"Bearer {self._access_token}"
