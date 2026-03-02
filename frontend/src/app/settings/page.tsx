@@ -308,25 +308,79 @@ export default function SettingsPage() {
 
                 {/* Missing Items */}
                 {setupResult.missing_items.length > 0 && (
-                  <div className="mt-4 rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
-                    <div className="flex items-center gap-2 mb-2">
-                      <AlertTriangle className="h-4 w-4 text-amber-600" />
-                      <p className="text-sm font-semibold text-amber-800">
-                        {setupResult.missing_items.length} item
-                        {setupResult.missing_items.length > 1 ? "s" : ""} missing
-                      </p>
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-4 py-3">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="h-4 w-4 text-amber-600" />
+                        <p className="text-sm font-semibold text-amber-800">
+                          {setupResult.missing_items.length} item
+                          {setupResult.missing_items.length > 1 ? "s" : ""} missing
+                        </p>
+                      </div>
+                      <ul className="space-y-1">
+                        {setupResult.missing_items.map((item, i) => (
+                          <li
+                            key={i}
+                            className="text-xs text-amber-700 flex items-center gap-1.5"
+                          >
+                            <span className="h-1 w-1 rounded-full bg-amber-400 shrink-0" />
+                            {item}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
-                    <ul className="space-y-1">
-                      {setupResult.missing_items.map((item, i) => (
-                        <li
-                          key={i}
-                          className="text-xs text-amber-700 flex items-center gap-1.5"
-                        >
-                          <span className="h-1 w-1 rounded-full bg-amber-400 shrink-0" />
-                          {item}
-                        </li>
-                      ))}
-                    </ul>
+
+                    {/* Manual stage setup instructions */}
+                    {setupResult.missing_items.some((item) =>
+                      item.toLowerCase().includes("stage")
+                    ) && (
+                      <div className="rounded-lg bg-slate-50 border border-slate-200 px-4 py-3">
+                        <p className="text-sm font-semibold text-slate-800 mb-2">
+                          How to create Matter Stages in Clio
+                        </p>
+                        <ol className="space-y-1.5 text-xs text-slate-600 list-decimal list-inside">
+                          <li>
+                            Go to{" "}
+                            <span className="font-medium text-slate-800">
+                              Clio Settings
+                            </span>{" "}
+                            (gear icon, top-right)
+                          </li>
+                          <li>
+                            Navigate to{" "}
+                            <span className="font-medium text-slate-800">
+                              Matter Stages
+                            </span>
+                          </li>
+                          <li>
+                            Select the{" "}
+                            <span className="font-medium text-slate-800">
+                              &quot;Personal Injury&quot;
+                            </span>{" "}
+                            practice area
+                          </li>
+                          <li>
+                            Add each missing stage:{" "}
+                            <span className="font-medium text-slate-800">
+                              {setupResult.missing_items
+                                .filter((item) =>
+                                  item.toLowerCase().includes("stage")
+                                )
+                                .map((item) =>
+                                  item
+                                    .replace(/^Stage:\s*/i, "")
+                                    .replace(/\s*—.*$/, "")
+                                )
+                                .join(", ")}
+                            </span>
+                          </li>
+                        </ol>
+                        <p className="text-[11px] text-slate-400 mt-2">
+                          Clio does not allow creating stages via API.
+                          Once created, click Re-check below.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 
