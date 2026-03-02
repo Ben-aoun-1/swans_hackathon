@@ -44,8 +44,8 @@ from app.services.document_gen import (
 )
 from app.services.email_sender import get_booking_link, send_client_email
 
-# Email used for contacts created by this pipeline
-PIPELINE_EMAIL = "medaminebenaoun@gmail.com"
+# Fallback email used for contacts created by this pipeline
+DEFAULT_PIPELINE_EMAIL = "talent.legal-engineer.hackathon.automation-email@swans.co"
 
 # Stage progression order
 STAGE_SEQUENCE = ["New Lead", "Report Received", "Data Verified"]
@@ -362,6 +362,7 @@ async def run_pipeline(
     refresh_token: str | None = None,
     session_id: str | None = None,
     base_url: str | None = None,
+    recipient_email: str | None = None,
 ) -> PipelineResult:
     """Run the full Clio post-approval pipeline.
 
@@ -374,11 +375,15 @@ async def run_pipeline(
         refresh_token: Per-session Clio refresh token.
         session_id: Session ID for token refresh propagation.
         base_url: Region-specific Clio API base URL.
+        recipient_email: Email address to send the retainer to (and use as contact email).
 
     Returns:
         PipelineResult with per-step status, priority score, speed-to-lead.
     """
     pipeline_start = time.monotonic()
+    # Resolve the recipient email: user-provided > default
+    contact_email = recipient_email or DEFAULT_PIPELINE_EMAIL
+    logger.info("Pipeline recipient email: {}", contact_email)
     # If frontend provided the upload timestamp, use it for true speed-to-lead
     upload_epoch_s = upload_timestamp / 1000.0 if upload_timestamp else None
     steps: list[PipelineStep] = []
@@ -495,7 +500,7 @@ async def run_pipeline(
             else:
                 first_name, last_name = _split_name(plaintiff.full_name.value)
 
-                existing = await clio.find_contact_by_email(PIPELINE_EMAIL)
+                existing = await clio.find_contact_by_email(contact_email)
                 if existing:
                     contact_id = existing["id"]
                     contact_source = "email"
@@ -526,7 +531,7 @@ async def run_pipeline(
                     contact = await clio.create_contact(
                         first_name=first_name,
                         last_name=last_name,
-                        email=PIPELINE_EMAIL,
+                        email=contact_email,
                         phone=plaintiff.phone,
                         address=plaintiff.address,
                     )
@@ -763,7 +768,7 @@ async def run_pipeline(
             else:
                 logger.info("Clio PDF not available — falling back to local generation")
                 retainer_bytes = generate_retainer_locally(
-                    extraction, result_matter_display_number, attorney_name
+                    extraction, result_matter_display_number, attorney_name, contact_email
                 )
                 if retainer_bytes:
                     step.status = "success"
@@ -774,7 +779,7 @@ async def run_pipeline(
         except ValueError as e:
             logger.warning("Clio template not found, trying local generation: {}", e)
             retainer_bytes = generate_retainer_locally(
-                extraction, result_matter_display_number, attorney_name
+                extraction, result_matter_display_number, attorney_name, contact_email
             )
             if retainer_bytes:
                 step.status = "success"
@@ -877,7 +882,7 @@ async def run_pipeline(
                     client_first, _ = _split_name(plaintiff.full_name.value)
 
                 email_data = EmailData(
-                    to_email=PIPELINE_EMAIL,
+                    to_email=contact_email,
                     client_first_name=client_first,
                     accident_date_formatted=_format_accident_date(extraction.accident_date),
                     accident_location=extraction.accident_location or "the accident location",

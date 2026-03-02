@@ -30,6 +30,7 @@ export async function approveAndPush(
   data: ExtractionResult,
   pdfBase64?: string | null,
   uploadTimestamp?: number | null,
+  recipientEmail?: string | null,
 ): Promise<PipelineResult> {
   const payload: Record<string, unknown> = { extraction: data };
   if (pdfBase64) {
@@ -37,6 +38,9 @@ export async function approveAndPush(
   }
   if (uploadTimestamp) {
     payload.upload_timestamp = uploadTimestamp;
+  }
+  if (recipientEmail) {
+    payload.recipient_email = recipientEmail;
   }
   const response = await backendDirect.post<PipelineResult>("/approve", payload, {
     timeout: 300_000,

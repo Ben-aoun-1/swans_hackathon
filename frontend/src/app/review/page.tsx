@@ -14,6 +14,7 @@ import {
   Info,
   Clock,
   Loader2,
+  Mail,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -111,6 +112,9 @@ export default function ReviewPage() {
 
   const { fields: partyFields } = useFieldArray({ control, name: "parties" });
 
+  // Recipient email
+  const [recipientEmail, setRecipientEmail] = useState("");
+
   // Review timer
   const [reviewStart] = useState(() => Date.now());
   const [elapsed, setElapsed] = useState(0);
@@ -139,9 +143,17 @@ export default function ReviewPage() {
     pipelineStatus === "sending_email";
 
   const onSubmit = async (data: ExtractionResult) => {
+    if (!recipientEmail.trim()) {
+      toast({
+        variant: "destructive",
+        title: "Email Required",
+        description: "Please enter a recipient email address before approving.",
+      });
+      return;
+    }
     try {
       setPipelineStatus("pushing_to_clio");
-      const result = await approveAndPush(data, pdfBase64, uploadTimestamp);
+      const result = await approveAndPush(data, pdfBase64, uploadTimestamp, recipientEmail.trim());
       setPipelineResult(result);
       setPipelineStatus("complete");
       router.push("/status");
@@ -596,44 +608,58 @@ export default function ReviewPage() {
           </ScrollArea>
 
           {/* Bottom bar */}
-          <div className="border-t border-slate-200 bg-white px-6 py-3 flex items-center justify-between shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
-            <div className="flex items-center gap-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => router.push("/")}
-                className="text-slate-500 hover:text-slate-700"
-              >
-                <ArrowLeft className="h-4 w-4 mr-1" />
-                Back
-              </Button>
-              <div className="flex items-center gap-1.5 text-xs text-slate-400">
-                <Clock className="h-3.5 w-3.5" />
-                <span>
-                  {mins}m {secs.toString().padStart(2, "0")}s
-                </span>
+          <div className="border-t border-slate-200 bg-white px-6 py-3 shadow-[0_-2px_12px_rgba(0,0,0,0.04)]">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => router.push("/")}
+                  className="text-slate-500 hover:text-slate-700"
+                >
+                  <ArrowLeft className="h-4 w-4 mr-1" />
+                  Back
+                </Button>
+                <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                  <Clock className="h-3.5 w-3.5" />
+                  <span>
+                    {mins}m {secs.toString().padStart(2, "0")}s
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="relative">
+                  <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+                  <Input
+                    type="email"
+                    placeholder="Recipient email address"
+                    value={recipientEmail}
+                    onChange={(e) => setRecipientEmail(e.target.value)}
+                    className="pl-9 w-72 h-10 text-sm"
+                  />
+                </div>
+                <Button
+                  type="submit"
+                  form="review-form"
+                  size="lg"
+                  disabled={isPushing || !recipientEmail.trim()}
+                  className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-md shadow-amber-600/20 gap-2 px-6"
+                >
+                  {isPushing ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Processing...
+                    </>
+                  ) : (
+                    <>
+                      <Send className="h-4 w-4" />
+                      Approve &amp; Push to Clio
+                    </>
+                  )}
+                </Button>
               </div>
             </div>
-
-            <Button
-              type="submit"
-              form="review-form"
-              size="lg"
-              disabled={isPushing}
-              className="bg-amber-600 hover:bg-amber-700 text-white font-semibold shadow-md shadow-amber-600/20 gap-2 px-6"
-            >
-              {isPushing ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                <>
-                  <Send className="h-4 w-4" />
-                  Approve &amp; Push to Clio
-                </>
-              )}
-            </Button>
           </div>
         </div>
       </div>

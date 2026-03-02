@@ -26,6 +26,7 @@ class ApproveRequest(BaseModel):
     matter_id: int | None = None  # Optional: use existing matter
     pdf_base64: str | None = None  # Original police report PDF for upload to Clio
     upload_timestamp: float | None = None  # Unix epoch ms when user uploaded the PDF
+    recipient_email: str | None = None  # Email address to send the retainer to
 
 
 @router.post("/approve")
@@ -69,6 +70,7 @@ async def approve_extraction(req: ApproveRequest, request: Request, response: Re
             refresh_token=tokens.get("refresh_token", ""),
             session_id=session_id,
             base_url=tokens.get("base_url"),
+            recipient_email=req.recipient_email,
         )
     except Exception as e:
         logger.error("Pipeline failed with unhandled exception: {}", e)

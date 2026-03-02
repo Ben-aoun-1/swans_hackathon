@@ -179,6 +179,7 @@ def _build_replacement_map(
     extraction: ExtractionResult,
     matter_display_number: str | None,
     attorney_name: str | None,
+    client_email: str | None = None,
 ) -> dict[str, str]:
     """Build the tag → value replacement map from extraction data."""
     plaintiff: PartyInfo | None = None
@@ -217,7 +218,7 @@ def _build_replacement_map(
         "<<Firm.Phone>>": "(718) 530-4040",
         "<<Matter.ResponsibleAttorney.Name>>": attorney_name or "Richards & Law",
         "<<Matter.DisplayNumber>>": matter_display_number or "N/A",
-        "<<Matter.Client.Email>>": "medaminebenaoun@gmail.com",
+        "<<Matter.Client.Email>>": client_email or "N/A",
         # Plaintiff / Client fields
         "<<Matter.CustomField.Plaintiff Name>>": (plaintiff.full_name.value or "N/A") if plaintiff else "N/A",
         "<<Matter.CustomField.Plaintiff Address>>": (plaintiff.address or "N/A") if plaintiff else "N/A",
@@ -247,6 +248,7 @@ def generate_retainer_locally(
     extraction: ExtractionResult,
     matter_display_number: str | None = None,
     attorney_name: str | None = None,
+    client_email: str | None = None,
 ) -> bytes | None:
     """Generate a retainer agreement PDF locally using python-docx + LibreOffice.
 
@@ -264,7 +266,7 @@ def generate_retainer_locally(
 
     logger.info("Generating retainer locally from {}", TEMPLATE_PATH)
 
-    replacements = _build_replacement_map(extraction, matter_display_number, attorney_name)
+    replacements = _build_replacement_map(extraction, matter_display_number, attorney_name, client_email)
 
     # Open template and fill merge fields
     doc = Document(str(TEMPLATE_PATH))
