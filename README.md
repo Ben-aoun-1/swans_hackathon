@@ -283,8 +283,8 @@ FROM_EMAIL=intake@your-firm.com
 CLIO_BASE_URL=https://app.clio.com
 
 # Optional — Booking Links
-IN_OFFICE_BOOKING_URL=https://calendly.com/richards-law/in-office
-VIRTUAL_BOOKING_URL=https://calendly.com/richards-law/virtual
+IN_OFFICE_BOOKING_URL=https://calendly.com/swans-santiago-p/summer-spring
+VIRTUAL_BOOKING_URL=https://calendly.com/swans-santiago-p/winter-autumn
 ```
 
 ---

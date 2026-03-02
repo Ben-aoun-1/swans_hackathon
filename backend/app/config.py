@@ -35,11 +35,11 @@ class Settings(BaseSettings):
 
     # Booking Links
     in_office_booking_url: str = Field(
-        default="https://calendly.com/richards-law/in-office",
+        default="https://calendly.com/swans-santiago-p/summer-spring",
         description="In-office booking URL (March-August)",
     )
     virtual_booking_url: str = Field(
-        default="https://calendly.com/richards-law/virtual",
+        default="https://calendly.com/swans-santiago-p/winter-autumn",
         description="Virtual booking URL (September-February)",
     )
 
