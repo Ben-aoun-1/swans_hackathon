@@ -26,6 +26,7 @@ def _get_clio_client(request: Request, response: Response) -> ClioClient:
         access_token=tokens["access_token"],
         refresh_token=tokens.get("refresh_token", ""),
         session_id=session_id,
+        base_url=tokens.get("base_url"),
     )
 
 

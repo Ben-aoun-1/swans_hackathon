@@ -361,6 +361,7 @@ async def run_pipeline(
     access_token: str | None = None,
     refresh_token: str | None = None,
     session_id: str | None = None,
+    base_url: str | None = None,
 ) -> PipelineResult:
     """Run the full Clio post-approval pipeline.
 
@@ -372,6 +373,7 @@ async def run_pipeline(
         access_token: Per-session Clio access token.
         refresh_token: Per-session Clio refresh token.
         session_id: Session ID for token refresh propagation.
+        base_url: Region-specific Clio API base URL.
 
     Returns:
         PipelineResult with per-step status, priority score, speed-to-lead.
@@ -400,6 +402,7 @@ async def run_pipeline(
         access_token=access_token,
         refresh_token=refresh_token,
         session_id=session_id,
+        base_url=base_url,
     ) as clio:
 
         # =================================================================

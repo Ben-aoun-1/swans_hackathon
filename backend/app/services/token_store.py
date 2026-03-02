@@ -11,8 +11,16 @@ import uuid
 from fastapi import Request, Response
 from loguru import logger
 
-# session_id -> {"access_token": ..., "refresh_token": ...}
+# session_id -> {"access_token": ..., "refresh_token": ..., "base_url": ...}
 _store: dict[str, dict[str, str]] = {}
+
+# Clio region → base URL mapping
+CLIO_REGIONS: dict[str, str] = {
+    "us": "https://app.clio.com",
+    "ca": "https://ca.app.clio.com",
+    "eu": "https://eu.app.clio.com",
+    "au": "https://au.app.clio.com",
+}
 
 
 def get_session_id(request: Request, response: Response) -> str:
@@ -35,22 +43,26 @@ def get_tokens(session_id: str) -> dict[str, str] | None:
     return _store.get(session_id)
 
 
-def set_tokens(session_id: str, access_token: str, refresh_token: str) -> None:
-    """Store Clio tokens for a session."""
+def set_tokens(
+    session_id: str,
+    access_token: str,
+    refresh_token: str,
+    base_url: str = "https://app.clio.com",
+) -> None:
+    """Store Clio tokens and region base URL for a session."""
     _store[session_id] = {
         "access_token": access_token,
         "refresh_token": refresh_token,
+        "base_url": base_url,
     }
-    logger.info("Stored tokens for session {}", session_id[:8])
+    logger.info("Stored tokens for session {} (region: {})", session_id[:8], base_url)
 
 
 def update_tokens(session_id: str, access_token: str, refresh_token: str) -> None:
-    """Update tokens after a refresh (called by ClioClient)."""
+    """Update tokens after a refresh (called by ClioClient). Preserves base_url."""
     if session_id in _store:
-        _store[session_id] = {
-            "access_token": access_token,
-            "refresh_token": refresh_token,
-        }
+        _store[session_id]["access_token"] = access_token
+        _store[session_id]["refresh_token"] = refresh_token
 
 
 def clear_tokens(session_id: str) -> None:

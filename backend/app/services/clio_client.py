@@ -44,10 +44,11 @@ class ClioClient:
         access_token: str | None = None,
         refresh_token: str | None = None,
         session_id: str | None = None,
+        base_url: str | None = None,
     ) -> None:
         self._access_token: str = access_token or settings.clio_access_token
         self._refresh_token: str = refresh_token or settings.clio_refresh_token
-        self._base_url: str = settings.clio_base_url
+        self._base_url: str = base_url or settings.clio_base_url
         self._client_id: str = settings.clio_client_id
         self._client_secret: str = settings.clio_client_secret
         self._session_id: str | None = session_id

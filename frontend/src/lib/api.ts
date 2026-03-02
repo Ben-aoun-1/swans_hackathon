@@ -52,8 +52,10 @@ export async function getClioStatus(): Promise<ClioStatus> {
   return response.data;
 }
 
-export async function getClioAuthUrl(): Promise<string> {
-  const response = await backendDirect.get<{ auth_url: string }>("/clio/auth");
+export async function getClioAuthUrl(region: string = "us"): Promise<string> {
+  const response = await backendDirect.get<{ auth_url: string }>("/clio/auth", {
+    params: { region },
+  });
   return response.data.auth_url;
 }
 

@@ -68,6 +68,7 @@ async def approve_extraction(req: ApproveRequest, request: Request, response: Re
             access_token=tokens["access_token"],
             refresh_token=tokens.get("refresh_token", ""),
             session_id=session_id,
+            base_url=tokens.get("base_url"),
         )
     except Exception as e:
         logger.error("Pipeline failed with unhandled exception: {}", e)
