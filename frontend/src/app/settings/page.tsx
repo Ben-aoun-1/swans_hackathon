@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
   CheckCircle2,
   XCircle,
@@ -18,7 +19,8 @@ import {
   ExternalLink,
   RefreshCw,
   LogOut,
-  Globe,
+  ArrowLeft,
+  Info,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -30,13 +32,6 @@ import {
   disconnectClio,
 } from "@/lib/api";
 import type { ClioStatus, SetupResult, SetupStep } from "@/lib/types";
-
-const CLIO_REGIONS = [
-  { code: "us", label: "United States", flag: "US" },
-  { code: "ca", label: "Canada", flag: "CA" },
-  { code: "eu", label: "Europe", flag: "EU" },
-  { code: "au", label: "Australia", flag: "AU" },
-] as const;
 
 const STEP_META: Record<string, { label: string; icon: typeof Settings }> = {
   authenticate: { label: "Authentication", icon: Shield },
@@ -60,12 +55,12 @@ function StepStatusIcon({ status }: { status: string }) {
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const [clioStatus, setClioStatus] = useState<ClioStatus | null>(null);
   const [setupResult, setSetupResult] = useState<SetupResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [checking, setChecking] = useState(false);
   const [running, setRunning] = useState(false);
-  const [selectedRegion, setSelectedRegion] = useState("us");
 
   const fetchStatus = useCallback(async () => {
     try {
@@ -92,7 +87,7 @@ export default function SettingsPage() {
 
   const handleConnect = async () => {
     try {
-      const url = await getClioAuthUrl(selectedRegion);
+      const url = await getClioAuthUrl();
       window.location.href = url;
     } catch {
       // error
@@ -152,8 +147,15 @@ export default function SettingsPage() {
   return (
     <div className="min-h-[calc(100vh-56px)] bg-slate-50 py-8 px-4">
       <div className="max-w-2xl mx-auto">
-        {/* Header */}
+        {/* Back button + Header */}
         <div className="mb-8 animate-fade-in-up">
+          <button
+            onClick={() => router.push("/")}
+            className="flex items-center gap-1.5 text-sm text-slate-400 hover:text-slate-700 transition-colors mb-4"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Back to Upload
+          </button>
           <div className="flex items-center gap-3 mb-2">
             <div className="h-10 w-10 rounded-xl bg-slate-900 flex items-center justify-center">
               <Settings className="h-5 w-5 text-amber-400" />
@@ -183,7 +185,7 @@ export default function SettingsPage() {
                 <p className="text-xs text-slate-400">
                   {isConnected
                     ? `Connected (${setupResult?.attorney_name || "loading..."})`
-                    : "Not connected - select your region and connect below"}
+                    : "Not connected - connect your account below"}
                 </p>
               </div>
             </div>
@@ -227,41 +229,6 @@ export default function SettingsPage() {
             </div>
           </div>
         </Card>
-
-        {/* Region Selector — only show when not connected */}
-        {!isConnected && (
-          <Card className="border-slate-200 shadow-sm overflow-hidden mb-6 animate-fade-in-up">
-            <div className="px-6 py-4 bg-white">
-              <div className="flex items-center gap-2 mb-3">
-                <Globe className="h-4 w-4 text-slate-400" />
-                <p className="text-sm font-semibold text-slate-800">
-                  Clio Region
-                </p>
-              </div>
-              <p className="text-xs text-slate-400 mb-3">
-                Select the region where your Clio account is hosted
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {CLIO_REGIONS.map((r) => (
-                  <button
-                    key={r.code}
-                    onClick={() => setSelectedRegion(r.code)}
-                    className={`
-                      px-3 py-2.5 rounded-lg border text-sm font-medium transition-all
-                      ${selectedRegion === r.code
-                        ? "border-amber-500 bg-amber-50 text-amber-800 ring-1 ring-amber-500"
-                        : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
-                      }
-                    `}
-                  >
-                    <span className="block text-xs font-bold">{r.flag}</span>
-                    <span className="block text-[11px] mt-0.5">{r.label}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-          </Card>
-        )}
 
         {/* Setup Status */}
         {isConnected && (
@@ -430,8 +397,8 @@ export default function SettingsPage() {
                   Connect your Clio Account
                 </p>
                 <p className="text-sm text-slate-400 mt-1 max-w-sm">
-                  Select your region above, then sign in with your Clio Manage
-                  account. The setup agent will configure everything automatically.
+                  Sign in with your Clio Manage account to get started.
+                  The setup agent will configure everything automatically.
                 </p>
               </div>
               <Button
@@ -441,6 +408,10 @@ export default function SettingsPage() {
                 <ExternalLink className="h-4 w-4" />
                 Connect to Clio
               </Button>
+              <div className="flex items-center gap-1.5 mt-1 text-xs text-slate-400">
+                <Info className="h-3 w-3" />
+                <span>Currently supports US-region Clio accounts only</span>
+              </div>
             </div>
           </Card>
         )}

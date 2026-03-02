@@ -7,9 +7,9 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  Zap,
-  Brain,
-  Layers,
+  Clock,
+  ShieldCheck,
+  Scale,
   FileText,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -164,33 +164,34 @@ export default function UploadPage() {
           <div className="flex items-center gap-2 mb-6">
             <div className="h-px flex-1 max-w-[40px] bg-amber-500" />
             <span className="text-xs font-semibold uppercase tracking-widest text-amber-600">
-              AI-Powered
+              Richards &amp; Law
             </span>
           </div>
 
           <h1 className="font-serif text-5xl lg:text-6xl text-slate-900 leading-[1.1] tracking-tight">
-            Intake
+            Client Intake,
             <br />
-            Automation
+            Automated.
           </h1>
 
           <p className="mt-6 text-lg text-slate-500 leading-relaxed max-w-md">
-            Upload a police report PDF. AI extracts every field.
-            Your Clio matter is updated in under 3 minutes.
+            From police report to signed retainer in minutes, not hours.
+            Upload a report, verify the extracted data, and let the
+            system handle Clio updates, document generation, and client outreach.
           </p>
 
           <div className="mt-8 flex flex-wrap gap-3">
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-sm text-slate-600">
-              <Zap className="h-3.5 w-3.5 text-amber-500" />
-              3 min vs 45 min
+              <Clock className="h-3.5 w-3.5 text-amber-500" />
+              45 min to under 3
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-sm text-slate-600">
-              <Brain className="h-3.5 w-3.5 text-amber-500" />
-              AI Extraction
+              <ShieldCheck className="h-3.5 w-3.5 text-amber-500" />
+              Human-in-the-Loop
             </div>
             <div className="flex items-center gap-2 px-4 py-2 bg-slate-100 rounded-full text-sm text-slate-600">
-              <Layers className="h-3.5 w-3.5 text-amber-500" />
-              20 Steps Automated
+              <Scale className="h-3.5 w-3.5 text-amber-500" />
+              End-to-End Pipeline
             </div>
           </div>
         </div>
@@ -257,7 +258,7 @@ export default function UploadPage() {
                 </div>
 
                 <p className="mt-6 text-xs text-slate-400 text-center">
-                  Claude Sonnet 4.6 is analyzing every page. This may take 30-60s.
+                  Analyzing every page of the report. This may take 30-60 seconds.
                 </p>
               </div>
             ) : (

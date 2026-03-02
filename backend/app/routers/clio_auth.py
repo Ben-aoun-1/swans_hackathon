@@ -2,7 +2,7 @@
 
 Tokens are stored per-session in memory so multiple users can
 each connect their own Clio account simultaneously.
-Supports multiple Clio regions (US, CA, EU, AU).
+Currently supports US-region Clio accounts only.
 """
 
 from __future__ import annotations
@@ -16,7 +16,6 @@ from loguru import logger
 
 from app.config import settings
 from app.services.token_store import (
-    CLIO_REGIONS,
     get_session_id,
     get_tokens,
     set_tokens,
@@ -26,46 +25,22 @@ from app.services.token_store import (
 router = APIRouter(prefix="/api/clio", tags=["clio-auth"])
 
 
-def _resolve_base_url(region: str) -> str:
-    """Map a region code to a Clio base URL."""
-    base_url = CLIO_REGIONS.get(region.lower())
-    if not base_url:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unknown Clio region '{region}'. Valid: {', '.join(CLIO_REGIONS)}",
-        )
-    return base_url
-
-
 @router.get("/auth")
-async def clio_auth(
-    request: Request,
-    response: Response,
-    region: str = "us",
-):
-    """Return the Clio OAuth authorization URL for the given region."""
+async def clio_auth(request: Request, response: Response):
+    """Return the Clio OAuth authorization URL (US region)."""
     if not settings.clio_client_id:
         raise HTTPException(status_code=500, detail="CLIO_CLIENT_ID not configured")
 
-    base_url = _resolve_base_url(region)
-
-    # Store the chosen region in a short-lived cookie so the callback knows
-    # which base URL to use for the token exchange.
-    session_id = get_session_id(request, response)
-    response.set_cookie(
-        "clio_region", region.lower(), httponly=True, samesite="lax", max_age=600,
-    )
+    # Ensure session cookie exists before redirect
+    get_session_id(request, response)
 
     params = {
         "response_type": "code",
         "client_id": settings.clio_client_id,
         "redirect_uri": settings.clio_redirect_uri,
     }
-    auth_url = f"{base_url}/oauth/authorize?{urlencode(params)}"
-    logger.info(
-        "Generated Clio auth URL for region={} (redirect_uri={})",
-        region, settings.clio_redirect_uri,
-    )
+    auth_url = f"{settings.clio_base_url}/oauth/authorize?{urlencode(params)}"
+    logger.info("Generated Clio auth URL (redirect_uri={})", settings.clio_redirect_uri)
     return {"auth_url": auth_url}
 
 
@@ -85,15 +60,11 @@ async def clio_callback(
         raise HTTPException(status_code=400, detail="Missing authorization code")
 
     session_id = get_session_id(request, response)
-
-    # Recover the region from the cookie set in /auth
-    region = request.cookies.get("clio_region", "us")
-    base_url = CLIO_REGIONS.get(region, "https://app.clio.com")
-    logger.info("OAuth callback for session {} (region={})", session_id[:8], region)
+    logger.info("OAuth callback for session {}", session_id[:8])
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            f"{base_url}/oauth/token",
+            f"{settings.clio_base_url}/oauth/token",
             data={
                 "grant_type": "authorization_code",
                 "code": code,
@@ -113,7 +84,7 @@ async def clio_callback(
         )
 
     body = resp.json()
-    set_tokens(session_id, body["access_token"], body["refresh_token"], base_url)
+    set_tokens(session_id, body["access_token"], body["refresh_token"], settings.clio_base_url)
 
     masked = body["access_token"][:8] + "..." + body["access_token"][-4:]
     logger.info("Clio OAuth complete for session {}. Token: {}", session_id[:8], masked)
@@ -149,5 +120,4 @@ async def clio_status(request: Request, response: Response):
             if has_token
             else None
         ),
-        "region": tokens.get("base_url", "") if tokens else None,
     }
