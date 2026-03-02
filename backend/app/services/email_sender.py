@@ -80,19 +80,24 @@ async def send_client_email(email_data: EmailData, smtp_config: dict) -> None:
     alt.attach(MIMEText(html_body, "html"))
     msg.attach(alt)
 
-    # Attach retainer PDF if available
+    # Attach retainer document if available
     if email_data.retainer_pdf_bytes:
-        pdf_part = MIMEApplication(email_data.retainer_pdf_bytes, _subtype="pdf")
-        pdf_part.add_header(
+        filename = email_data.retainer_pdf_filename
+        if filename.endswith(".docx"):
+            subtype = "vnd.openxmlformats-officedocument.wordprocessingml.document"
+        else:
+            subtype = "pdf"
+        attachment = MIMEApplication(email_data.retainer_pdf_bytes, _subtype=subtype)
+        attachment.add_header(
             "Content-Disposition",
             "attachment",
-            filename=email_data.retainer_pdf_filename,
+            filename=filename,
         )
-        msg.attach(pdf_part)
+        msg.attach(attachment)
         logger.debug(
-            "Attached retainer PDF ({} bytes) as '{}'",
+            "Attached retainer ({} bytes) as '{}'",
             len(email_data.retainer_pdf_bytes),
-            email_data.retainer_pdf_filename,
+            filename,
         )
 
     # Send via SMTP

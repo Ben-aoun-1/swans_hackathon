@@ -756,6 +756,7 @@ async def run_pipeline(
         step = PipelineStep(name="generate_retainer", status="running")
         steps.append(step)
         retainer_bytes: bytes | None = None
+        retainer_ext: str = "pdf"  # tracks whether attachment is pdf or docx
 
         try:
             retainer_doc = await generate_retainer(clio, result_matter_id, plaintiff_name)
@@ -767,23 +768,25 @@ async def run_pipeline(
                 step.detail += f", downloaded {len(retainer_bytes)} bytes"
             else:
                 logger.info("Clio PDF not available — falling back to local generation")
-                retainer_bytes = generate_retainer_locally(
+                local_result = generate_retainer_locally(
                     extraction, result_matter_display_number, attorney_name, contact_email
                 )
-                if retainer_bytes:
+                if local_result:
+                    retainer_bytes, retainer_ext = local_result
                     step.status = "success"
-                    step.detail += f", local PDF generated ({len(retainer_bytes)} bytes)"
+                    step.detail += f", local {retainer_ext} generated ({len(retainer_bytes)} bytes)"
                 else:
                     step.status = "success"
-                    step.detail += " (PDF generation failed — email sent without attachment)"
+                    step.detail += " (document generation failed — email sent without attachment)"
         except ValueError as e:
             logger.warning("Clio template not found, trying local generation: {}", e)
-            retainer_bytes = generate_retainer_locally(
+            local_result = generate_retainer_locally(
                 extraction, result_matter_display_number, attorney_name, contact_email
             )
-            if retainer_bytes:
+            if local_result:
+                retainer_bytes, retainer_ext = local_result
                 step.status = "success"
-                step.detail = f"Local PDF generated ({len(retainer_bytes)} bytes)"
+                step.detail = f"Local {retainer_ext} generated ({len(retainer_bytes)} bytes)"
             else:
                 step.status = "skipped"
                 step.detail = str(e)
@@ -890,7 +893,7 @@ async def run_pipeline(
                     booking_link=booking_link,
                     booking_type=booking_type,
                     retainer_pdf_bytes=retainer_bytes,
-                    retainer_pdf_filename=f"Retainer_Agreement_{plaintiff_name.replace(' ', '_')}.pdf",
+                    retainer_pdf_filename=f"Retainer_Agreement_{plaintiff_name.replace(' ', '_')}.{retainer_ext}",
                     ai_personal_paragraph=ai_paragraph,
                 )
 

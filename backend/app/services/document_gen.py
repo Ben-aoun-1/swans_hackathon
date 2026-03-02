@@ -249,16 +249,16 @@ def generate_retainer_locally(
     matter_display_number: str | None = None,
     attorney_name: str | None = None,
     client_email: str | None = None,
-) -> bytes | None:
-    """Generate a retainer agreement PDF locally using python-docx + LibreOffice.
+) -> tuple[bytes, str] | None:
+    """Generate a retainer agreement locally using python-docx.
 
-    Opens the template at ``templates/retainer_agreement.docx``, fills all
-    ``<<merge_field>>`` tags with values from the extraction data, saves a
-    temporary .docx, converts to PDF via LibreOffice headless, and returns
-    the raw PDF bytes.
+    Fills the template with extraction data and attempts PDF conversion
+    via LibreOffice. If LibreOffice is unavailable, returns the filled
+    ``.docx`` instead so the email still has an attachment.
 
     Returns:
-        PDF bytes, or None if generation fails.
+        Tuple of (file_bytes, extension) e.g. (b"...", "pdf") or (b"...", "docx"),
+        or None if generation fails entirely.
     """
     if not TEMPLATE_PATH.exists():
         logger.error("Retainer template not found at {}", TEMPLATE_PATH)
@@ -278,7 +278,7 @@ def generate_retainer_locally(
         doc.save(str(docx_path))
         logger.info("Saved filled docx to {}", docx_path)
 
-        # Convert to PDF via LibreOffice headless
+        # Try PDF conversion via LibreOffice headless
         try:
             result = subprocess.run(
                 [
@@ -293,22 +293,20 @@ def generate_retainer_locally(
                 timeout=60,
             )
 
-            if result.returncode != 0:
-                logger.error("LibreOffice conversion failed: {}", result.stderr)
-                return None
+            if result.returncode == 0:
+                pdf_path = Path(tmpdir) / "retainer_filled.pdf"
+                if pdf_path.exists():
+                    pdf_bytes = pdf_path.read_bytes()
+                    logger.info("Generated retainer PDF: {} bytes", len(pdf_bytes))
+                    return pdf_bytes, "pdf"
 
+            logger.warning("LibreOffice conversion failed: {}", result.stderr)
         except FileNotFoundError:
-            logger.error("LibreOffice not installed — cannot convert docx to PDF")
-            return None
+            logger.warning("LibreOffice not installed — will attach .docx instead")
         except subprocess.TimeoutExpired:
-            logger.error("LibreOffice conversion timed out after 60s")
-            return None
+            logger.warning("LibreOffice conversion timed out — will attach .docx instead")
 
-        pdf_path = Path(tmpdir) / "retainer_filled.pdf"
-        if not pdf_path.exists():
-            logger.error("PDF not found at {} after conversion", pdf_path)
-            return None
-
-        pdf_bytes = pdf_path.read_bytes()
-        logger.info("Generated retainer PDF: {} bytes", len(pdf_bytes))
-        return pdf_bytes
+        # Fallback: return the filled .docx
+        docx_bytes = docx_path.read_bytes()
+        logger.info("Returning filled .docx as fallback: {} bytes", len(docx_bytes))
+        return docx_bytes, "docx"
