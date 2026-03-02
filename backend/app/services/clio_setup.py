@@ -224,46 +224,51 @@ async def setup_clio_account(clio: ClioClient) -> SetupResult:
         existing = {s.get("name", "").lower(): s for s in stages}
         logger.info("Existing stages: {}", list(existing.keys()))
 
-        created = []
         found = []
-        for i, stage_name in enumerate(REQUIRED_STAGES):
+        missing = []
+        for stage_name in REQUIRED_STAGES:
             if stage_name.lower() in existing:
                 found.append(stage_name)
-            elif result.practice_area_id:
+            else:
+                missing.append(stage_name)
+
+        if not missing:
+            step.status = "success"
+            step.detail = f"All {len(REQUIRED_STAGES)} stages present"
+        else:
+            # Try to create missing stages via API
+            created = []
+            still_missing = []
+            for i, stage_name in enumerate(missing):
+                if not result.practice_area_id:
+                    still_missing.append(stage_name)
+                    continue
                 try:
                     new_stage = await clio.create_matter_stage(
                         stage_name,
                         result.practice_area_id,
-                        order=i + 1,
+                        order=len(found) + i + 1,
                     )
                     created.append(stage_name)
                     logger.info("Created stage '{}' (id={})", stage_name, new_stage.get("id"))
                 except Exception as e:
-                    logger.warning("Could not create stage '{}': {}", stage_name, e)
-                    result.missing_items.append(f"Stage: {stage_name}")
+                    logger.warning("Could not create stage '{}' via API: {}", stage_name, e)
+                    still_missing.append(stage_name)
+
+            if still_missing:
+                for ms in still_missing:
+                    result.missing_items.append(f"Stage: {ms} — create manually in Clio → Settings → Matter Stages")
+                step.status = "error"
+                detail_parts = []
+                if found:
+                    detail_parts.append(f"{len(found)} found")
+                if created:
+                    detail_parts.append(f"{len(created)} created")
+                detail_parts.append(f"{len(still_missing)} need manual setup (Clio → Settings → Matter Stages under '{PRACTICE_AREA_NAME}')")
+                step.detail = ", ".join(detail_parts)
             else:
-                logger.warning("Cannot create stage '{}' — no practice area ID", stage_name)
-                result.missing_items.append(f"Stage: {stage_name}")
-
-        # Verify stages were actually created by re-fetching
-        if created:
-            verify_stages = await clio.get_matter_stages(practice_area_id=result.practice_area_id)
-            if not verify_stages:
-                verify_stages = await clio.get_matter_stages()
-            verify_names = {s.get("name", "").lower() for s in verify_stages}
-            for stage_name in created:
-                if stage_name.lower() not in verify_names:
-                    logger.error("Stage '{}' was reported as created but not found on verify!", stage_name)
-                    result.missing_items.append(f"Stage: {stage_name} (creation not confirmed)")
-
-        stage_missing = [m for m in result.missing_items if m.startswith("Stage:")]
-        parts = []
-        if found:
-            parts.append(f"{len(found)} found")
-        if created:
-            parts.append(f"{len(created)} created")
-        step.status = "success" if not stage_missing else "error"
-        step.detail = ", ".join(parts) if parts else "None processed"
+                step.status = "success"
+                step.detail = f"{len(found)} found, {len(created)} created"
     except Exception as e:
         step.status = "error"
         step.detail = str(e)[:200]
