@@ -103,10 +103,12 @@ async def check_clio_setup(clio: ClioClient) -> SetupResult:
         step.detail = str(e)[:200]
     result.steps.append(step)
 
-    # 3. Check matter stages
+    # 3. Check matter stages (try with practice area filter, then without)
     step = SetupStep(name="matter_stages")
     try:
         stages = await clio.get_matter_stages(practice_area_id=result.practice_area_id)
+        if not stages:
+            stages = await clio.get_matter_stages()
         stage_names = {s.get("name", "").lower() for s in stages}
         missing_stages = [s for s in REQUIRED_STAGES if s.lower() not in stage_names]
         if not missing_stages:
@@ -215,35 +217,57 @@ async def setup_clio_account(clio: ClioClient) -> SetupResult:
     # ── Step 3: Matter Stages ──
     step = SetupStep(name="matter_stages")
     try:
+        # Fetch existing stages (try filtered, then all)
         stages = await clio.get_matter_stages(practice_area_id=result.practice_area_id)
+        if not stages:
+            stages = await clio.get_matter_stages()
         existing = {s.get("name", "").lower(): s for s in stages}
+        logger.info("Existing stages: {}", list(existing.keys()))
+
         created = []
         found = []
         for i, stage_name in enumerate(REQUIRED_STAGES):
             if stage_name.lower() in existing:
                 found.append(stage_name)
-            else:
+            elif result.practice_area_id:
                 try:
-                    await clio.create_matter_stage(
+                    new_stage = await clio.create_matter_stage(
                         stage_name,
                         result.practice_area_id,
                         order=i + 1,
                     )
                     created.append(stage_name)
-                except ClioAPIError as e:
+                    logger.info("Created stage '{}' (id={})", stage_name, new_stage.get("id"))
+                except Exception as e:
                     logger.warning("Could not create stage '{}': {}", stage_name, e)
                     result.missing_items.append(f"Stage: {stage_name}")
+            else:
+                logger.warning("Cannot create stage '{}' — no practice area ID", stage_name)
+                result.missing_items.append(f"Stage: {stage_name}")
 
+        # Verify stages were actually created by re-fetching
+        if created:
+            verify_stages = await clio.get_matter_stages(practice_area_id=result.practice_area_id)
+            if not verify_stages:
+                verify_stages = await clio.get_matter_stages()
+            verify_names = {s.get("name", "").lower() for s in verify_stages}
+            for stage_name in created:
+                if stage_name.lower() not in verify_names:
+                    logger.error("Stage '{}' was reported as created but not found on verify!", stage_name)
+                    result.missing_items.append(f"Stage: {stage_name} (creation not confirmed)")
+
+        stage_missing = [m for m in result.missing_items if m.startswith("Stage:")]
         parts = []
         if found:
             parts.append(f"{len(found)} found")
         if created:
             parts.append(f"{len(created)} created")
-        step.status = "success" if not result.missing_items else "error"
+        step.status = "success" if not stage_missing else "error"
         step.detail = ", ".join(parts) if parts else "None processed"
     except Exception as e:
         step.status = "error"
         step.detail = str(e)[:200]
+        logger.error("Stage setup failed: {}", e)
     result.steps.append(step)
 
     # ── Step 4: Custom Fields ──

@@ -701,8 +701,10 @@ async def run_pipeline(
 
         try:
             all_stages = await clio.get_matter_stages(practice_area_id=pi_practice_area_id)
+            if not all_stages:
+                all_stages = await clio.get_matter_stages()
             stage_name_to_id = {s.get("name", ""): s["id"] for s in all_stages}
-            logger.info("Stage map: {}", stage_name_to_id)
+            logger.info("Stage map ({}): {}", len(all_stages), stage_name_to_id)
 
             matter_data = await clio.get_matter(result_matter_id)
             current_stage_name = (matter_data.get("matter_stage") or {}).get("name", "")
@@ -1144,6 +1146,8 @@ async def run_pipeline(
             retainer_sent_id = stage_name_to_id.get("Retainer Sent")
             if not retainer_sent_id:
                 all_stages = await clio.get_matter_stages(practice_area_id=pi_practice_area_id)
+                if not all_stages:
+                    all_stages = await clio.get_matter_stages()
                 for s in all_stages:
                     if "retainer sent" in s.get("name", "").lower():
                         retainer_sent_id = s["id"]
